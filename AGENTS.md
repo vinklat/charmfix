@@ -18,7 +18,7 @@ definition.
 | -- | -- |
 | [REPAIRS.md](REPAIRS.md) | Image-data invariant, verification, repair rules, camera identity, defects, EXIF output format, file statuses |
 | [CLI.md](CLI.md) | Command options, exit codes, discovery, output files and atomic writes, source safety, console output, JSON report and its privacy |
-| [DEVELOPMENT.md](DEVELOPMENT.md) | Setup, quality gates, layout, module dependencies, style |
+| [DEVELOPMENT.md](DEVELOPMENT.md) | Setup, quality gates, release, layout, module dependencies, style |
 | [TESTING.md](TESTING.md) | Test harness and required cases |
 
 ## Task routing
@@ -31,7 +31,8 @@ definition.
 | File reading/writing, report fields | `CLI.md` | `DEVELOPMENT.md` layout |
 | New module or import | `DEVELOPMENT.md` layout and dependencies | — |
 | Tests and fixtures | `TESTING.md` | The contract for the behavior under test |
-| Build, release, version bump | `DEVELOPMENT.md` | — |
+| Build, release, version bump | `DEVELOPMENT.md` release | `.github/workflows/release.yml` |
+| Quality gate or CI change | `DEVELOPMENT.md` quality gates | `.github/workflows/ci.yml` |
 | Any `*.md` edit | [Writing rules](#writing-rules) | `tests/test_docs.py` |
 
 ## Workflow
@@ -39,7 +40,7 @@ definition.
 1. Read only the owning contract sections.
 2. Change the contract and the code in the same change.
 3. Add or update the required cases in `TESTING.md`'s table.
-4. Run every gate in [DEVELOPMENT.md](DEVELOPMENT.md#quality-gates).
+4. Run every gate in [DEVELOPMENT.md](DEVELOPMENT.md#quality-gates); CI runs them again.
 
 ## Writing rules
 

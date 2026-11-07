@@ -16,13 +16,23 @@ outside the EXIF block. charmfix fixes all of these; the exact rules are in
 
 ## Install
 
-Requires [uv](https://docs.astral.sh/uv/) and a supported Python →
-[DEVELOPMENT.md](DEVELOPMENT.md#prerequisites-and-setup).
+Released versions are published to [PyPI](https://pypi.org/project/charmfix/). With
+[uv](https://docs.astral.sh/uv/):
 
 ```sh
-uv tool install .          # puts `charmfix` on your PATH
-uvx --from . charmfix -h   # or run it without installing
+uv tool install charmfix   # puts `charmfix` on your PATH
+uvx charmfix -h            # or run it without installing
 ```
+
+`pipx install charmfix` works too. Before the first release, or to run unreleased changes, install
+from a checkout of this repository (→ [DEVELOPMENT.md](DEVELOPMENT.md#quality-gates)):
+
+```sh
+uv tool install .
+uvx --from . charmfix -h
+```
+
+Supported Python versions → [DEVELOPMENT.md](DEVELOPMENT.md#prerequisites-and-setup).
 
 ## Usage
 
@@ -56,8 +66,9 @@ Volumes (or Full Disk Access), then restart that app.
 
 | Location | Audience | Authority |
 | -- | -- | -- |
-| [REPAIRS.md](REPAIRS.md), [CLI.md](CLI.md), [DEVELOPMENT.md](DEVELOPMENT.md), [TESTING.md](TESTING.md) | Developers and AI agents | Canonical contracts |
-| [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md) (imports AGENTS.md) | AI agents and developers | How to use the contracts |
+| [CLI.md](CLI.md) | Users, developers and AI agents | Canonical contract |
+| [REPAIRS.md](REPAIRS.md), [DEVELOPMENT.md](DEVELOPMENT.md), [TESTING.md](TESTING.md) | Developers and AI agents | Canonical contracts |
+| [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md) (imports AGENTS.md) | AI agents | How to use the contracts |
 | `README.md` | Users | Non-canonical user guide |
 
 ## License

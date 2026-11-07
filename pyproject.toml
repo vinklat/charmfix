@@ -2,6 +2,7 @@
 name = "charmfix"
 version = "0.1.0"
 description = "Repair broken or missing EXIF metadata in Kodak Charmera (Generalplus) JPEGs without touching image data"
+readme = "README.md"
 authors = [
     { name = "Václav Vinklát", email = "vin@email.cz" }
 ]
@@ -9,12 +10,31 @@ license = "MIT"
 license-files = ["LICENSE"]
 requires-python = ">=3.11"
 dependencies = ["piexif>=1.1.3"]
+keywords = ["exif", "jpeg", "kodak", "charmera", "photos", "metadata"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: End Users/Desktop",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Graphics",
+]
+
+[project.urls]
+Homepage = "https://github.com/vinklat/charmfix"
+Source = "https://github.com/vinklat/charmfix"
+Issues = "https://github.com/vinklat/charmfix/issues"
+Documentation = "https://github.com/vinklat/charmfix/blob/main/CLI.md"
 
 [project.scripts]
 charmfix = "charmfix.cli:main"
 
 [build-system]
-requires = ["uv_build>=0.10.3,<0.11.0"]
+requires = ["uv_build>=0.12.23,<0.14.0"]
 build-backend = "uv_build"
 
 [dependency-groups]
