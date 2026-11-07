@@ -37,14 +37,20 @@ Run all of these before handing over a change.
 | Item | Rule |
 | -- | -- |
 | Trigger | Pushing a tag `vX.Y.Z`, with or without a suffix (e.g. `v0.2.0rc1`). |
+| Tag on main | The tagged commit must be on `main`, or the release stops. |
 | Version check | The tag without its `v` must equal the `pyproject.toml` version, or the release stops. |
 | Gates | `ci.yml` runs in full before the build. |
+| Build | sdist and wheel, without the uv cache. |
 | PyPI description | `README.md`, with its relative links rewritten to the tag on GitHub; the repo copy is unchanged. |
+| Check order | The checks below run after the artifact upload. |
+| Check failure | Any failed check stops the release. |
 | Link check | No relative link is left in the wheel's description. |
 | Metadata check | `twine check --strict` passes. |
 | Smoke test | The wheel's `charmfix --version` prints the tag version. |
-| Stages | TestPyPI first, then PyPI. |
+| Stages | TestPyPI, then PyPI, then a GitHub release. |
+| GitHub release | The sdist and wheel, with generated notes; a tag with a suffix makes a pre-release. |
 | GitHub environments | `testpypi` and `pypi`; `pypi` has a required reviewer, so the PyPI upload waits for approval. |
+| Tag ruleset | A repository ruleset limits who creates `v*` tags. |
 | Trusted publisher identity | Owner `vinklat`, repo `charmfix`, workflow `release.yml`. |
 | Trusted publisher on TestPyPI | That identity with environment `testpypi`. |
 | Trusted publisher on PyPI | That identity with environment `pypi`. |
