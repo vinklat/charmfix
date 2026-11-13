@@ -236,7 +236,7 @@ def test_value_equal_to_target_is_kept_as_stored(
     changes: list[str],
     identity: str,
 ) -> None:
-    """Padding is not a difference, even when another defect (the size) forces a rebuild."""
+    """Padding is not a difference, per field, even when another defect forces a rebuild."""
     src = layout(with_exif(base_jpeg, valid_tiff(640, make=stored[0], model=stored[1])))
     r = repair(src, make=target[0], model=target[1])
     assert (r.plan.identity, r.plan.status_hint) == (identity, "repaired")
@@ -401,9 +401,9 @@ def test_custom_target_output_on_a_later_default_run(
     changes: list[str],
     warned: bool,
 ) -> None:
+    """REPAIRS.md Later run: a custom-target output, repaired again with the default target."""
     r = repair(layout(with_exif(base_jpeg, valid_tiff())), make="Acme", model=model)
-    jf = jpeg.parse(r.out)
-    later = plan_repair(jf, read_exif(jf.exif_tiff() or b""), MTIME, NOW)
+    later = repair(r.out).plan
     assert (later.identity, later.status_hint) == (identity, status)
     assert [str(c) for c in later.changes] == changes  # kept, or set back to the default
     assert any("kept" in w for w in later.warnings) == warned
@@ -420,7 +420,8 @@ def test_assumed_file_already_at_target_is_valid_without_warning(base_jpeg: byte
 @pytest.mark.parametrize("value", ["A", "Snap 1", "~", "A" * MAX_TARGET_TEXT])
 def test_target_text_accepted(value: str) -> None:
     assert check_target_text(value) == value
-    assert RepairOptions(make=value, model=value).make == value
+    opts = RepairOptions(make=value, model=value)
+    assert (opts.make, opts.model) == (value, value)
 
 
 @pytest.mark.parametrize(
