@@ -1,6 +1,6 @@
 [project]
 name = "charmfix"
-version = "0.1.0"
+version = "0.1.1"
 description = "Repair broken or missing EXIF metadata in Kodak Charmera (Generalplus) JPEGs without touching image data"
 readme = "README.md"
 authors = [
