@@ -475,7 +475,7 @@ def test_broken_thumbnail_dropped(base_jpeg: bytes) -> None:
 def test_dnl_height_is_partial_without_size_tags(base_jpeg: bytes) -> None:
     src = with_exif(set_sof_height(base_jpeg, 0), broken_charmera_tiff())
     jf = jpeg.parse(src)
-    plan = plan_repair(jf, read_exif(jf.exif_tiff() or b""), MTIME, NOW)
+    plan = plan_repair(jf, read_exif(jf.exif_tiff() or b""), MTIME, NOW, RepairOptions())
     assert plan.status_hint == "partial"
     out = jpeg.splice(jf, build_exif(plan))
     verify_output(jf, out, plan)

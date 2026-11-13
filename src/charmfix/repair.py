@@ -299,11 +299,8 @@ def plan_repair(
     exif: ExifData | None,
     src_mtime: float,
     now: datetime,
-    opts: RepairOptions | None = None,
-    *,
-    exif_segment_count: int | None = None,
+    options: RepairOptions,
 ) -> RepairPlan:
-    opts = opts or RepairOptions()
     src: dict[str, dict[int, RawValue]] = exif.ifds if exif else {}
     new: dict[str, dict[int, Any]] = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
     plan = RepairPlan(
@@ -337,7 +334,7 @@ def plan_repair(
             plan.partial_reasons.append("unreadable EXIF block rebuilt from nothing")
         for w in exif.warnings:
             defect(w)
-    n_exif = exif_segment_count if exif_segment_count is not None else len(jf.exif_segments)
+    n_exif = len(jf.exif_segments)
     if n_exif > 1:
         defect(f"{n_exif} Exif APP1 segments")
 
@@ -377,7 +374,7 @@ def plan_repair(
             change(Change(name, None, _show(default)))
             new[ifd][tag] = default
 
-    _apply_identity(plan, jf, opts)
+    _apply_identity(plan, jf, options)
     _apply_thumbnail(plan, exif, src)
 
     if exif is not None:
