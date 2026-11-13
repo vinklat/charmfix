@@ -32,7 +32,7 @@ from charmfix.exif_write import build_exif
 from charmfix.repair import (
     DEFAULT_MAKE,
     DEFAULT_MODEL,
-    MAX_TARGET_TEXT,
+    MAX_TARGET_LENGTH,
     RepairOptions,
     RepairPlan,
     check_target_text,
@@ -417,7 +417,7 @@ def test_assumed_file_already_at_target_is_valid_without_warning(base_jpeg: byte
     assert not r.plan.warnings
 
 
-@pytest.mark.parametrize("value", ["A", "Snap 1", "~", "A" * MAX_TARGET_TEXT])
+@pytest.mark.parametrize("value", ["A", "Snap 1", "~", "A" * MAX_TARGET_LENGTH])
 def test_target_text_accepted(value: str) -> None:
     assert check_target_text(value) == value
     opts = RepairOptions(make=value, model=value)
@@ -428,7 +428,7 @@ def test_target_text_accepted(value: str) -> None:
     ("value", "message"),
     [
         pytest.param("", "1-64 characters", id="empty"),
-        pytest.param("A" * (MAX_TARGET_TEXT + 1), "1-64 characters", id="too-long"),
+        pytest.param("A" * (MAX_TARGET_LENGTH + 1), "1-64 characters", id="too-long"),
         pytest.param(" Acme", "printable ASCII", id="leading-space"),
         pytest.param("Acme ", "printable ASCII", id="trailing-space"),
         pytest.param("Ačme", "printable ASCII", id="non-ascii"),
