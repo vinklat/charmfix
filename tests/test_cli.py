@@ -137,6 +137,7 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
 
     report = json.loads(report_path.read_text())
     assert report["options"] == pipeline.RunOptions(out).report_options()  # defaults
+    assert (report["options"]["make"], report["options"]["model"]) == ("Kodak", "Charmera")
     by_path = {f["rel_path"]: f for f in report["files"]}
     assert set(by_path) == {
         "DCIM/model_1987/PICT0010.jpg",
