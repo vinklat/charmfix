@@ -23,6 +23,7 @@ root is the file's folder.
 | `-v`, `--verbose` | off | Log every file and every change. |
 | `--report` | none | Write the [JSON report](#report) to this path. |
 | `--no-preserve-structure` | mirror folders | Put every output directly in the output folder. |
+| `--no-date-prefix` | prefix | Keep the source file name → [output files](#output-files). |
 | `--no-assume-charmera` | assume | Turn off `charmera(assumed)` → [REPAIRS.md](REPAIRS.md#camera-identity). |
 | `--make` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Make; its text rules → [REPAIRS.md](REPAIRS.md#camera-identity). |
 | `--model` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Model; same rules as `--make`. |
@@ -59,9 +60,12 @@ Files are visited in sorted order. Symlinked folders inside the input are not fo
 | Rule | Behavior |
 | -- | -- |
 | Path | Input-relative path under the output folder; with `--no-preserve-structure`, the file name only. |
+| Date prefix | The file name starts with the capture time → [REPAIRS.md](REPAIRS.md#rules) (rule 1) as `YYYYMMDD-HHMMSS_`, unless it already starts with that prefix. Off with `--no-date-prefix`. |
+| Naming time | A file is named after it is analysed; one that is skipped or fails before that has no `output`. |
 | Symlinked folder | A folder in the output tree that leads outside the output folder → that file `failed`; nothing is written through it. |
 | Name clashes in one run | Compared case-insensitively; later files get `_1`, `_2`, … before the extension. |
 | Existing output | `skipped` (`exists`) and left untouched; re-runs never create `_n` copies. `--force` replaces it. |
+| Other prefix setting | An output written with the other `--no-date-prefix` setting, or by a version without the prefix, has another name: it is not matched, and a new copy is written. |
 | Atomic write | Temp file `.charmfix-*.tmp` in the target folder → fsync → read back and compare → publish under the final name. |
 | Publish without `--force` | Hard link to the final name; the link fails if the name exists, so another writer is never overwritten. |
 | No hard links | (FAT/exFAT and similar) Without `--force`, the name is reserved with `O_EXCL`, then the temp file is moved over it. |
@@ -102,7 +106,7 @@ over the path, so an existing file there is replaced, never written through.
 | Key | Content |
 | -- | -- |
 | `tool`, `version` | `"charmfix"` and the package version. |
-| `options` | `recursive`, `preserve_structure`, `force`, `dry_run`, `assume_charmera`, `make`, `model`. |
+| `options` | `recursive`, `preserve_structure`, `force`, `dry_run`, `date_prefix`, `assume_charmera`, `make`, `model`. |
 | `summary` | The console summary counts, plus `processed`, `skipped_reasons` and `stopped`. |
 | `files[]` | One object per candidate: `rel_path`, `status`, `output`, `reason`, `error`, `sof_size`, `old_sizes`, `raw_date`, `date_written`, `timestamp_source`, `changes`, `exif_rebuilt`, `makernote`, `identity`, `private_text`, `partial_reasons`, `warnings`, `image_sha256`. |
 

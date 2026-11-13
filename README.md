@@ -47,6 +47,12 @@ codes and the report format are in [CLI.md](CLI.md). Each file gets a status →
 [REPAIRS.md](REPAIRS.md#status). Running charmfix again on the same card skips files it has already
 written → [CLI.md](CLI.md#output-files).
 
+**Output names start with the capture time**, e.g. `20260402-083000_PICT0010.jpg`. The camera
+restarts its numbering on an empty card, so a later card's `PICT0010.jpg` gets its own name instead
+of being skipped as already written. `--no-date-prefix` keeps the camera's names. An output folder
+filled without the prefix (by that option or an older charmfix) is not recognised: running into it
+again writes prefixed copies → [CLI.md](CLI.md#output-files).
+
 **Run it on the card itself.** When a file has no usable EXIF date (often no EXIF at all), the
 capture date is the file's modification time, which the camera sets when it takes the photo
 ([rule 1a](REPAIRS.md#rules)). Use the mounted card, or a copy that kept the times (`cp -p`, Finder

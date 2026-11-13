@@ -33,6 +33,7 @@ from charmfix.exif_read import read_exif
 from charmfix.repair import RepairOptions
 
 MTIME = datetime(2026, 4, 2, 8, 30, 0).timestamp()
+PREFIX = "20260402-083000_"  # MTIME as an output name prefix
 OVERLAP = "input and output folders must not overlap"
 REPORT_INSIDE = "the report must not be written inside the input folder"
 FILE_OUTPUT = "the output folder must not be the input file's folder"
@@ -95,6 +96,7 @@ def single_jpeg(tmp_path: Path) -> Path:
     src = tmp_path / "in" / "x.jpg"
     src.parent.mkdir()
     src.write_bytes(charmera_layout(make_jpeg()))
+    os.utime(src, (MTIME, MTIME))  # no EXIF: the output is named by this time
     return src
 
 
@@ -150,12 +152,14 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
         "DCIM/generated/notes.jpg",
     }
     assert by_path["DCIM/generated/PICT0102.jpg"]["status"] == "failed"
+    assert by_path["DCIM/generated/PICT0102.jpg"]["output"] is None  # failed before naming
     assert by_path["DCIM/generated/notes.jpg"]["reason"] == "not JPEG content"
     for name in ("DCIM/model_1987/PICT0010.jpg", "DCIM/model_2000/PICT0023.jpg"):
         assert by_path[name]["status"] == "repaired"
         assert by_path[name]["date_written"] == "2026:04:02 08:30:00"
     gen = by_path["DCIM/generated/PICT0100.JPG"]
     assert gen["status"] == "repaired"
+    assert gen["output"] == "DCIM/generated/20260303-121629_PICT0100.JPG"  # the EXIF date
     assert gen["makernote"] == "discarded(invalid)"
     assert gen["date_written"] == "2026:03:03 12:16:29"
 
@@ -172,9 +176,9 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
         "UserComment": "kept",
     }
 
-    # outputs mirror the folder structure and keep the source mtime
-    written = out / "DCIM/model_1987/PICT0010.jpg"
-    assert written.exists() and (out / "DCIM/model_2000/PICT0023.jpg").exists()
+    # outputs mirror the folder structure, start with the capture time and keep the source mtime
+    written = out / f"DCIM/model_1987/{PREFIX}PICT0010.jpg"
+    assert written.exists() and (out / f"DCIM/model_2000/{PREFIX}PICT0023.jpg").exists()
     assert written.stat().st_mtime == MTIME
     assert not (out / ".Trashes").exists()
     assert not list(out.rglob("._*"))
@@ -189,7 +193,7 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert second["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
     assert snapshot(out) == out_before
 
-    # running on the output: everything is already valid and copied unchanged
+    # running on the output: everything is already valid and copied unchanged, under its name
     out2 = tmp_path / "out2"
     assert run(out, "-o", out2, "--report", report_path) == 0
     third = json.loads(report_path.read_text())["summary"]
@@ -201,7 +205,7 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
 def test_force_rewrites(card: Path, tmp_path: Path) -> None:
     out = tmp_path / "out"
     run(card, "-o", out)
-    target = out / "DCIM/model_1987/PICT0010.jpg"
+    target = out / f"DCIM/model_1987/{PREFIX}PICT0010.jpg"
     target.write_bytes(b"stale")
     run(card, "-o", out, "--force")
     assert target.read_bytes() != b"stale"
@@ -254,7 +258,12 @@ def test_flatten_and_no_recursion(card: Path, tmp_path: Path) -> None:
     out = tmp_path / "flat"
     run(card / "DCIM", "-o", out, "--no-preserve-structure")
     names = sorted(p.name for p in out.iterdir())
-    assert names == ["PICT0010.jpg", "PICT0023.jpg", "PICT0100.JPG", "PICT0101.jpg"]
+    assert names == [
+        "20260101-000000_PICT0101.jpg",
+        "20260303-121629_PICT0100.JPG",
+        f"{PREFIX}PICT0010.jpg",
+        f"{PREFIX}PICT0023.jpg",
+    ]
     out2 = tmp_path / "flat2"
     run(card / "DCIM", "-o", out2, "--no-recursive")
     assert not out2.exists()  # no JPEGs directly in DCIM
@@ -285,7 +294,40 @@ def test_report_option_names_do_not_collide() -> None:
 def test_single_file_input(tmp_path: Path) -> None:
     src = single_jpeg(tmp_path)
     assert run(src, "-o", tmp_path / "out") == 0
-    assert (tmp_path / "out" / "x.jpg").exists()
+    assert (tmp_path / "out" / f"{PREFIX}x.jpg").exists()
+
+
+def reused_card(root: Path, session: int, taken: datetime) -> Path:
+    """A card emptied and reused: each session restarts the camera's file numbers."""
+    src = root / f"session{session}" / "DCIM" / "PICT0001.jpg"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(charmera_layout(make_jpeg()))
+    os.utime(src, (taken.timestamp(), taken.timestamp()))
+    return src.parents[1]
+
+
+def test_date_prefix_keeps_reused_card_numbers_apart(tmp_path: Path) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    first = reused_card(tmp_path, 1, datetime(2026, 4, 2, 8, 30, 0))
+    second = reused_card(tmp_path, 2, datetime(2026, 5, 9, 17, 5, 42))
+    assert run(first, "-o", out) == 0
+    assert run(second, "-o", out, "--report", report) == 0
+    assert json.loads(report.read_text())["summary"]["repaired"] == 1  # not skipped as `exists`
+    assert sorted(p.name for p in (out / "DCIM").iterdir()) == [
+        f"{PREFIX}PICT0001.jpg",
+        "20260509-170542_PICT0001.jpg",
+    ]
+
+
+def test_no_date_prefix_keeps_source_names(tmp_path: Path) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    for session, day in ((1, 2), (2, 9)):
+        reused_card(tmp_path / "cards", session, datetime(2026, 4, day, 8, 30, 0))
+    args: list[str | Path] = ["-o", out, "--no-date-prefix", "--no-preserve-structure"]
+    args += ["--report", report]
+    assert run(tmp_path / "cards", *args) == 0
+    assert sorted(p.name for p in out.iterdir()) == ["PICT0001.jpg", "PICT0001_1.jpg"]
+    assert json.loads(report.read_text())["options"]["date_prefix"] is False
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
@@ -315,7 +357,7 @@ def test_no_assume_charmera_flag(card: Path, tmp_path: Path) -> None:
 def test_custom_make_and_model(tmp_path: Path) -> None:
     src, out, report = single_jpeg(tmp_path), tmp_path / "out", tmp_path / "r.json"
     assert run(src, "-o", out, "--make", "Acme", "--model", "Snap 1", "--report", report) == 0
-    tiff = jpeg.parse((out / "x.jpg").read_bytes()).exif_tiff()
+    tiff = jpeg.parse((out / f"{PREFIX}x.jpg").read_bytes()).exif_tiff()
     assert tiff is not None
     exif = read_exif(tiff)
     written = [exif.get("0th", tag) for tag in (0x010F, 0x0110)]
@@ -431,9 +473,9 @@ def test_overlap_refused_when_identity_check_fails(
 @pytest.mark.parametrize(
     ("args", "output"),
     [
-        (["-o", "{folder}/fixed"], "{folder}/fixed/x.jpg"),
-        (["-o", "{tmp}"], "{tmp}/x.jpg"),
-        (["-o", "{tmp}/out", "--report", "{folder}/r.json"], "{tmp}/out/x.jpg"),
+        (["-o", "{folder}/fixed"], "{folder}/fixed/{prefix}x.jpg"),
+        (["-o", "{tmp}"], "{tmp}/{prefix}x.jpg"),
+        (["-o", "{tmp}/out", "--report", "{folder}/r.json"], "{tmp}/out/{prefix}x.jpg"),
     ],
     ids=["output-inside", "output-parent", "report-next-to-file"],
 )
@@ -442,7 +484,7 @@ def test_single_file_may_write_near_source(tmp_path: Path, args: list[str], outp
     paths = {"src": src, "folder": src.parent, "tmp": tmp_path}
     source = src.read_bytes()
     assert run(src, *fill(args, **paths)) == 0
-    assert Path(output.format(**paths)).exists()
+    assert Path(output.format(**paths, prefix=PREFIX)).exists()
     assert src.read_bytes() == source
 
 

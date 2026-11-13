@@ -6,7 +6,7 @@ import contextlib
 import errno
 import os
 import tempfile
-from collections.abc import Iterable
+from datetime import datetime
 from pathlib import Path
 
 # Errors meaning "this filesystem cannot hard-link" (FAT/exFAT, SMB, ...).
@@ -31,25 +31,33 @@ class OutsideOutputError(Exception):
     """A symlinked folder would send the write outside the output folder."""
 
 
-def assign_outputs(
-    rel_paths: Iterable[Path], output_root: Path, preserve_structure: bool
-) -> list[Path]:
-    """Map input-relative paths to output paths, de-duplicating within this run.
+DATE_PREFIX_FORMAT = "%Y%m%d-%H%M%S_"
+
+
+class OutputNames:
+    """Output paths for one run, assigned in processing order and unique within the run.
 
     Collisions are detected case-insensitively (macOS and FAT are case-insensitive).
     Existing files on disk are *not* considered here: those are skipped later.
     """
-    claimed: set[str] = set()
-    result = []
-    for rel in rel_paths:
-        target = output_root / (rel if preserve_structure else Path(rel.name))
+
+    def __init__(self, root: Path, *, preserve_structure: bool, date_prefix: bool) -> None:
+        self.root, self.preserve_structure, self.date_prefix = root, preserve_structure, date_prefix
+        self._claimed: set[str] = set()
+
+    def assign(self, rel: Path, taken: datetime) -> Path:
+        """Claim the output path for the input-relative ``rel``, captured at ``taken``."""
+        target = self.root / (rel if self.preserve_structure else Path(rel.name))
+        if self.date_prefix:
+            prefix = taken.strftime(DATE_PREFIX_FORMAT)
+            if not target.name.startswith(prefix):  # a charmfix output keeps its name
+                target = target.with_name(prefix + target.name)
         candidate, n = target, 0
-        while str(candidate).casefold() in claimed:
+        while str(candidate).casefold() in self._claimed:
             n += 1
             candidate = target.with_name(f"{target.stem}_{n}{target.suffix}")
-        claimed.add(str(candidate).casefold())
-        result.append(candidate)
-    return result
+        self._claimed.add(str(candidate).casefold())
+        return candidate
 
 
 def _current_umask() -> int:
