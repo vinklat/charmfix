@@ -66,7 +66,7 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 | Identity | When | Make / Model |
 | -- | -- | -- |
 | `charmera(exif)` | Make or Model contains "charmera" (any case) | Set to the target. |
-| `charmera(assumed)` | `GPEncoder` comment, default options | Set to the target when Make and Model are both empty or both equal the target; otherwise kept with a warning. |
+| `charmera(assumed)` | `GPEncoder` comment, default options | Set to the target when Make and Model are both empty; kept when both equal the target; otherwise kept with a warning. |
 | `generalplus-unconfirmed` | `GPEncoder` comment with `--no-assume-charmera` | Left as they are. |
 | `unknown` | Anything else | Left as they are. |
 
@@ -74,6 +74,10 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 | -- | -- | -- |
 | Make | `Kodak` | `--make` |
 | Model | `Charmera` | `--model` |
+
+| Target rule | Detail |
+| -- | -- |
+| Comparison | Surrounding spaces and trailing NULs are ignored; a value equal to the target is kept as stored. |
 
 ## Defects
 

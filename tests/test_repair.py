@@ -172,6 +172,18 @@ def test_charmera_in_exif_is_normalized(base_jpeg: bytes) -> None:
     assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == ("Kodak", "Charmera")
 
 
+@pytest.mark.parametrize("assumed", [False, True], ids=["charmera-exif", "charmera-assumed"])
+def test_make_equal_to_target_is_kept_as_stored(base_jpeg: bytes, assumed: bool) -> None:
+    """Padding is not a difference, even when another defect (the size) forces a rebuild."""
+    target = ("Acme", "Snap 1") if assumed else (DEFAULT_MAKE, DEFAULT_MODEL)
+    src = with_exif(base_jpeg, valid_tiff(640, make=f"{target[0]} ", model=target[1]))
+    r = repair(charmera_layout(src) if assumed else src, make=target[0], model=target[1])
+    assert r.plan.status_hint == "repaired"
+    assert r.tag("0th", 0x010F) == f"{target[0]} "
+    assert not [c for c in r.plan.changes if c.field == "0th.Make"]
+    assert not r.plan.warnings
+
+
 # 11
 def test_gpencoder_with_other_make_is_kept_with_warning(base_jpeg: bytes) -> None:
     src = charmera_layout(with_exif(base_jpeg, valid_tiff(make="Acme", model="Cam")))

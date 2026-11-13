@@ -480,21 +480,19 @@ def _apply_identity(plan: RepairPlan, jf: JpegFile, opts: RepairOptions) -> None
 
     def set_identity() -> None:
         for (ifd, tag), target, old in ((T_MAKE, opts.make, make), (T_MODEL, opts.model, model)):
-            if old != target:
+            if old != target:  # a value equal to the target is kept as stored
                 plan.defects.append(f"{tag_name(ifd, tag)} is {old!r}")
                 plan.changes.append(Change(tag_name(ifd, tag), old or None, target))
-            zeroth[tag] = target.encode()
+                zeroth[tag] = target.encode()
 
     if "charmera" in f"{make} {model}".lower():
         plan.identity = "charmera(exif)"
         set_identity()
     elif gpencoder and opts.assume_charmera:
         plan.identity = "charmera(assumed)"
-        blank = not make and not model
-        already_target = (make, model) == (opts.make, opts.model)
-        if blank or already_target:
+        if not make and not model:
             set_identity()
-        else:
+        elif (make, model) != (opts.make, opts.model):
             plan.warnings.append(f"GPEncoder file has Make/Model {make!r}/{model!r}; kept")
     elif gpencoder:
         plan.identity = "generalplus-unconfirmed"
