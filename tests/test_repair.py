@@ -228,6 +228,23 @@ def test_custom_target_rewrites_charmera_exif(base_jpeg: bytes) -> None:
 
 
 @pytest.mark.parametrize(
+    ("make", "status", "makernote"),
+    [
+        (DEFAULT_MAKE, "already_valid", "kept"),
+        ("Acme", "repaired", "discarded(not relocatable)"),
+    ],
+    ids=["default-target", "other-target"],
+)
+def test_other_target_rebuilds_a_valid_file(
+    base_jpeg: bytes, make: str, status: str, makernote: str
+) -> None:
+    exif = [*standard_exif_entries(), long_(0xA002, 64), long_(0xA003, 48)]
+    tiff = build_tiff(standard_ifd0_entries(), [*exif, E(0x927C, 7, 16, b"M" * 16)])
+    r = repair(with_exif(base_jpeg, tiff), make=make)
+    assert (r.plan.status_hint, r.plan.makernote_status) == (status, makernote)
+
+
+@pytest.mark.parametrize(
     ("make", "model"), [("Acme", DEFAULT_MODEL), (DEFAULT_MAKE, "Snap 1")], ids=["make", "model"]
 )
 def test_custom_target_parts_are_independent(base_jpeg: bytes, make: str, model: str) -> None:

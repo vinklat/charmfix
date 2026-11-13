@@ -81,6 +81,8 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 | Length | A charmfix limit, not an EXIF one (EXIF ASCII has none); real Make/Model values are far shorter. |
 | Invalid text | `RepairOptions` and `RunOptions` raise `ValueError`; on the command line → usage error ([CLI.md](CLI.md#exit-codes)). |
 | Comparison | Surrounding spaces and trailing NULs are ignored; a value equal to the target is kept as stored. |
+| Other target, valid file | A `charmera(exif)` Make/Model that differs is a [defect](#defects): the file is rebuilt, so rules 4 and 5 drop its MakerNote and unknown tags. |
+| Later run, other target | An output with the `GPEncoder` comment is `charmera(assumed)`: its Make/Model is kept with a warning and it stays `already_valid`. Without the comment it is `unknown`. |
 
 ## Defects
 
