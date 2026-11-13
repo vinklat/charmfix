@@ -82,7 +82,7 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 | Invalid text | Rejected, naming the field, when the target is set, before any file is planned with it; on the command line, a usage error → [CLI.md](CLI.md#exit-codes). |
 | Comparison | Surrounding spaces and trailing NULs are ignored; a value equal to the target is kept as stored. |
 | Other target, valid file | A `charmera(exif)` Make/Model that differs is a [defect](#defects): the file is rebuilt, so rules 4 and 5 drop its MakerNote and unknown tags. |
-| Later run | Identity is read from the output, never from an earlier run: only a Make/Model containing "charmera" (e.g. `--make` alone keeps Model `Charmera`) gets a new target; any other stays `already_valid`. |
+| Later run | Identity is read from the output, never from an earlier run, by the table above: a custom Make/Model without "charmera" is kept, so the output stays `already_valid`; one containing it (e.g. `--make` alone keeps Model `Charmera`) gets the new target. |
 | Re-target | Run on the originals. |
 
 ## Defects
