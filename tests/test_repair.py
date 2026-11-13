@@ -245,7 +245,9 @@ def test_other_target_rebuilds_a_valid_file(
 
 
 @pytest.mark.parametrize(
-    ("make", "model"), [("Acme", DEFAULT_MODEL), (DEFAULT_MAKE, "Snap 1")], ids=["make", "model"]
+    ("make", "model"),
+    [("Acme", DEFAULT_MODEL), (DEFAULT_MAKE, "Snap 1")],
+    ids=["make-only", "model-only"],
 )
 def test_custom_target_parts_are_independent(base_jpeg: bytes, make: str, model: str) -> None:
     r = repair(charmera_layout(base_jpeg), make=make, model=model)
@@ -253,16 +255,18 @@ def test_custom_target_parts_are_independent(base_jpeg: bytes, make: str, model:
 
 
 @pytest.mark.parametrize(
-    ("make", "model"), [("Acme", "Other"), ("Other", "Snap 1")], ids=["make", "model"]
+    ("make", "model"),
+    [("Acme", "Other"), ("Other", "Snap 1"), ("Other", "Cam")],
+    ids=["make-matches", "model-matches", "neither-matches"],
 )
-def test_assumed_file_with_one_part_at_target_is_kept_with_warning(
+def test_assumed_file_not_at_target_is_kept_with_warning(
     base_jpeg: bytes, make: str, model: str
 ) -> None:
     src = charmera_layout(with_exif(base_jpeg, valid_tiff(make=make, model=model)))
     r = repair(src, make="Acme", model="Snap 1")
     assert r.plan.identity == "charmera(assumed)"
     assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == (make, model)
-    assert any("kept" in w for w in r.plan.warnings)
+    assert any(f"{make!r}/{model!r}; kept" in w for w in r.plan.warnings)
 
 
 def test_custom_target_with_no_assume_charmera(base_jpeg: bytes) -> None:
@@ -296,14 +300,7 @@ def test_assumed_file_already_at_target_is_valid_without_warning(base_jpeg: byte
     assert not r.plan.warnings
 
 
-def test_custom_target_keeps_foreign_make_with_warning(base_jpeg: bytes) -> None:
-    src = charmera_layout(with_exif(base_jpeg, valid_tiff(make="Other", model="Cam")))
-    r = repair(src, make="Acme", model="Snap 1")
-    assert r.tag("0th", 0x010F) == "Other"
-    assert any("Other" in w for w in r.plan.warnings)
-
-
-@pytest.mark.parametrize("value", ["A", "Snap 1", "A" * MAX_CAMERA_TEXT])
+@pytest.mark.parametrize("value", ["A", "Snap 1", "~", "A" * MAX_CAMERA_TEXT])
 def test_camera_text_accepted(value: str) -> None:
     assert check_camera_text(value) == value
     assert RepairOptions(make=value, model=value).make == value
@@ -318,6 +315,7 @@ def test_camera_text_accepted(value: str) -> None:
         pytest.param("Acme ", "printable ASCII", id="trailing-space"),
         pytest.param("Ačme", "printable ASCII", id="non-ascii"),
         pytest.param("Ac\tme", "printable ASCII", id="control"),
+        pytest.param("Ac\x7fme", "printable ASCII", id="del"),
     ],
 )
 def test_camera_text_rejected(value: str, message: str) -> None:
