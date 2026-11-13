@@ -492,25 +492,31 @@ def _apply_sizes(plan: RepairPlan, jf: JpegFile) -> None:
 
 def _apply_identity(plan: RepairPlan, jf: JpegFile, opts: RepairOptions) -> None:
     zeroth = plan.ifds["0th"]
-    make, model = _ascii(zeroth.get(T_MAKE[1])), _ascii(zeroth.get(T_MODEL[1]))
+    stored_make = _ascii(zeroth.get(T_MAKE[1]))
+    stored_model = _ascii(zeroth.get(T_MODEL[1]))
     gpencoder = any(c.rstrip(b"\x00").strip().startswith(b"GPEncoder") for c in jf.comments)
 
     def set_identity() -> None:
-        for (ifd, tag), target, old in ((T_MAKE, opts.make, make), (T_MODEL, opts.model, model)):
-            if old != target:  # a value equal to the target is kept as stored
-                plan.defects.append(f"{tag_name(ifd, tag)} is {old!r}")
-                plan.changes.append(Change(tag_name(ifd, tag), old or None, target))
+        for (ifd, tag), target, stored in (
+            (T_MAKE, opts.make, stored_make),
+            (T_MODEL, opts.model, stored_model),
+        ):
+            if stored != target:  # per field: a value equal to the target is kept as stored
+                plan.defects.append(f"{tag_name(ifd, tag)} is {stored!r}")
+                plan.changes.append(Change(tag_name(ifd, tag), stored or None, target))
                 zeroth[tag] = target.encode()
 
-    if "charmera" in f"{make} {model}".lower():
+    if "charmera" in f"{stored_make} {stored_model}".lower():
         plan.identity = "charmera(exif)"
         set_identity()
     elif gpencoder and opts.assume_charmera:
         plan.identity = "charmera(assumed)"
-        if not make and not model:
+        if not stored_make and not stored_model:
             set_identity()
-        elif (make, model) != (opts.make, opts.model):
-            plan.warnings.append(f"GPEncoder file has Make/Model {make!r}/{model!r}; kept")
+        elif (stored_make, stored_model) != (opts.make, opts.model):  # both: kept, warned
+            plan.warnings.append(
+                f"GPEncoder file has Make/Model {stored_make!r}/{stored_model!r}; kept"
+            )
     elif gpencoder:
         plan.identity = "generalplus-unconfirmed"
 
