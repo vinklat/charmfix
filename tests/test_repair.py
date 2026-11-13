@@ -32,10 +32,10 @@ from charmfix.exif_write import build_exif
 from charmfix.repair import (
     DEFAULT_MAKE,
     DEFAULT_MODEL,
-    MAX_CAMERA_TEXT,
+    MAX_TARGET_TEXT,
     RepairOptions,
     RepairPlan,
-    check_camera_text,
+    check_target_text,
     plan_repair,
 )
 from charmfix.verify import verify_output
@@ -417,9 +417,9 @@ def test_assumed_file_already_at_target_is_valid_without_warning(base_jpeg: byte
     assert not r.plan.warnings
 
 
-@pytest.mark.parametrize("value", ["A", "Snap 1", "~", "A" * MAX_CAMERA_TEXT])
-def test_camera_text_accepted(value: str) -> None:
-    assert check_camera_text(value) == value
+@pytest.mark.parametrize("value", ["A", "Snap 1", "~", "A" * MAX_TARGET_TEXT])
+def test_target_text_accepted(value: str) -> None:
+    assert check_target_text(value) == value
     assert RepairOptions(make=value, model=value).make == value
 
 
@@ -427,7 +427,7 @@ def test_camera_text_accepted(value: str) -> None:
     ("value", "message"),
     [
         pytest.param("", "1-64 characters", id="empty"),
-        pytest.param("A" * (MAX_CAMERA_TEXT + 1), "1-64 characters", id="too-long"),
+        pytest.param("A" * (MAX_TARGET_TEXT + 1), "1-64 characters", id="too-long"),
         pytest.param(" Acme", "printable ASCII", id="leading-space"),
         pytest.param("Acme ", "printable ASCII", id="trailing-space"),
         pytest.param("Ačme", "printable ASCII", id="non-ascii"),
@@ -435,9 +435,9 @@ def test_camera_text_accepted(value: str) -> None:
         pytest.param("Ac\x7fme", "printable ASCII", id="del"),
     ],
 )
-def test_camera_text_rejected(value: str, message: str) -> None:
+def test_target_text_rejected(value: str, message: str) -> None:
     with pytest.raises(ValueError, match=f"^must be .*{message}"):
-        check_camera_text(value)
+        check_target_text(value)
     with pytest.raises(ValueError, match=f"^make must be .*{message}"):
         RepairOptions(make=value)
     with pytest.raises(ValueError, match=f"^model must be .*{message}"):

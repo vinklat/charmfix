@@ -12,7 +12,7 @@ from typing import TextIO
 from . import __version__
 from .discovery import unreadable_reason
 from .pipeline import DiskFullError, Job, RunOptions, prepare, process_file
-from .repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, check_camera_text
+from .repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, check_target_text
 from .report import FileResult, Summary, build_report, write_report
 
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Kodak Charmera Repaired"
@@ -55,10 +55,10 @@ class _ProgressAwareHandler(logging.StreamHandler):  # type: ignore[type-arg]
         super().emit(record)
 
 
-def _camera_text(value: str) -> str:
+def _target_text(value: str) -> str:
     """argparse type for --make/--model: the repair rule, reported as a usage error."""
     try:
-        return check_camera_text(value)
+        return check_target_text(value)
     except ValueError as exc:
         raise argparse.ArgumentTypeError(str(exc)) from exc
 
@@ -101,14 +101,14 @@ def _parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--make",
-        type=_camera_text,
+        type=_target_text,
         default=DEFAULT_MAKE,
         metavar="TEXT",
         help=f"camera Make written to Charmera files (default: {DEFAULT_MAKE})",
     )
     p.add_argument(
         "--model",
-        type=_camera_text,
+        type=_target_text,
         default=DEFAULT_MODEL,
         metavar="TEXT",
         help=f"camera Model written to Charmera files (default: {DEFAULT_MODEL})",
