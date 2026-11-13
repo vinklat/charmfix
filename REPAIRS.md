@@ -66,7 +66,7 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 | Identity | When | Make / Model |
 | -- | -- | -- |
 | `charmera(exif)` | Make or Model contains "charmera" (any case) | Set to the target. |
-| `charmera(assumed)` | `GPEncoder` comment, default options | Set to the target when Make and Model are both empty; kept when both equal the target; otherwise kept with a warning. |
+| `charmera(assumed)` | `GPEncoder` comment, without `--no-assume-charmera` | Set to the target when Make and Model are both empty; kept when both equal the target; otherwise kept with a warning. |
 | `generalplus-unconfirmed` | `GPEncoder` comment with `--no-assume-charmera` | Left as they are. |
 | `unknown` | Anything else | Left as they are. |
 
@@ -79,7 +79,7 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 | -- | -- |
 | Text | 1–64 printable ASCII characters, no leading or trailing space. |
 | Length | A charmfix limit, not an EXIF one (EXIF ASCII has none); real Make/Model values are far shorter. |
-| Invalid text | Rejected, naming the field, when the target is set, before any file is planned with it; on the command line → usage error ([CLI.md](CLI.md#exit-codes)). |
+| Invalid text | Rejected, naming the field, when the target is set, before any file is planned with it; on the command line, a usage error → [CLI.md](CLI.md#exit-codes). |
 | Comparison | Surrounding spaces and trailing NULs are ignored; a value equal to the target is kept as stored. |
 | Other target, valid file | A `charmera(exif)` Make/Model that differs is a [defect](#defects): the file is rebuilt, so rules 4 and 5 drop its MakerNote and unknown tags. |
 | Later run | Identity is read from the output, never from an earlier run: only a Make/Model containing "charmera" (e.g. `--make` alone keeps Model `Charmera`) gets a new target; any other stays `already_valid`. |
