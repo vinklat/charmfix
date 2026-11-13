@@ -31,7 +31,7 @@ Tests assert the owning contract directly; its values are not copied here.
 | Dates (`test_dates.py`) | Accepted and rejected forms, normal form, sanity warnings → [REPAIRS.md](REPAIRS.md#rules). |
 | Repair rules (`test_repair.py`) | At least one case per rule → [REPAIRS.md](REPAIRS.md#rules). |
 | Repair identity and status (`test_repair.py`) | Each identity → [REPAIRS.md](REPAIRS.md#camera-identity); each status → [REPAIRS.md](REPAIRS.md#status). |
-| Repair target text (`test_repair.py`) | Accepted boundaries and each rejected kind → [REPAIRS.md](REPAIRS.md#camera-identity). |
+| Repair target text (`test_repair.py`) | Accepted boundaries and each rejected kind → [REPAIRS.md](REPAIRS.md#camera-identity), for Make and Model, each naming its field. |
 | Repair round trip (`test_repair.py`) | Every case runs plan → write → splice → verify, re-reads the output, and a second run gives `already_valid`. |
 | Output validity (`test_external.py`) | Per generated fixture: identical pixels and image-data hash, `exiftool -validate` OK, `sips` size and date. |
 | Atomic writes (`test_output.py`) | Every row except disk full → [CLI.md](CLI.md#output-files). |

@@ -320,7 +320,7 @@ def test_camera_option_rejection_is_a_usage_error(
         run(src, "-o", out, option, " Acme")
     assert exc.value.code == cli.EXIT_FATAL
     err = capsys.readouterr().err
-    assert f"argument {option}" in err and "printable ASCII" in err
+    assert f"argument {option}: must be printable ASCII" in err  # field named once
     assert not out.exists()
 
 

@@ -175,8 +175,11 @@ class RepairOptions:
     model: str = DEFAULT_MODEL
 
     def __post_init__(self) -> None:
-        check_camera_text(self.make)
-        check_camera_text(self.model)
+        for name, value in (("make", self.make), ("model", self.model)):
+            try:
+                check_camera_text(value)
+            except ValueError as exc:
+                raise ValueError(f"{name} {exc}") from None
 
 
 @dataclass(frozen=True)

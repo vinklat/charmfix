@@ -346,9 +346,11 @@ def test_camera_text_accepted(value: str) -> None:
     ],
 )
 def test_camera_text_rejected(value: str, message: str) -> None:
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match=f"^must be .*{message}"):
         check_camera_text(value)
-    with pytest.raises(ValueError, match=message):
+    with pytest.raises(ValueError, match=f"^make must be .*{message}"):
+        RepairOptions(make=value)
+    with pytest.raises(ValueError, match=f"^model must be .*{message}"):
         RepairOptions(model=value)
 
 
