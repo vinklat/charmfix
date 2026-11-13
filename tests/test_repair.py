@@ -276,20 +276,22 @@ def test_custom_target_rewrites_charmera_exif(base_jpeg: bytes) -> None:
 
 
 @pytest.mark.parametrize(
-    ("make", "status", "makernote"),
+    ("make", "status", "makernote", "unknown_kept"),
     [
-        (DEFAULT_MAKE, "already_valid", "kept"),
-        ("Acme", "repaired", "discarded(not relocatable)"),
+        (DEFAULT_MAKE, "already_valid", "kept", True),
+        ("Acme", "repaired", "discarded(not relocatable)", False),
     ],
     ids=["default-target", "other-target"],
 )
 def test_other_target_rebuilds_a_valid_file(
-    base_jpeg: bytes, make: str, status: str, makernote: str
+    base_jpeg: bytes, make: str, status: str, makernote: str, unknown_kept: bool
 ) -> None:
     exif = [*standard_exif_entries(), long_(0xA002, 64), long_(0xA003, 48)]
-    tiff = build_tiff(standard_ifd0_entries(), [*exif, E(0x927C, 7, 16, b"M" * 16)])
+    unknown = ascii_(0xC000, "x")  # not in piexif's table: rule 5
+    tiff = build_tiff(standard_ifd0_entries(), [*exif, E(0x927C, 7, 16, b"M" * 16), unknown])
     r = repair(with_exif(base_jpeg, tiff), make=make)
     assert (r.plan.status_hint, r.plan.makernote_status) == (status, makernote)
+    assert (r.tag("Exif", 0xC000) is not None) == unknown_kept
 
 
 @pytest.mark.parametrize(
