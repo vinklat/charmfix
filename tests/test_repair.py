@@ -28,7 +28,7 @@ from helpers import (
 from charmfix import jpeg
 from charmfix.exif_read import ExifData, read_exif
 from charmfix.exif_write import build_exif
-from charmfix.repair import RepairOptions, RepairPlan, plan_repair
+from charmfix.repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, RepairPlan, plan_repair
 from charmfix.verify import verify_output
 
 MTIME = datetime(2026, 5, 1, 10, 20, 30).timestamp()
@@ -50,11 +50,18 @@ class Outcome:
         return rv.value[0] if len(rv.value) == 1 else rv.value
 
 
-def repair(data: bytes, *, assume_charmera: bool = True) -> Outcome:
+def repair(
+    data: bytes,
+    *,
+    assume_charmera: bool = True,
+    make: str = DEFAULT_MAKE,
+    model: str = DEFAULT_MODEL,
+) -> Outcome:
+    opts = RepairOptions(assume_charmera=assume_charmera, now=NOW, make=make, model=model)
     jf = jpeg.parse(data)
     tiff = jf.exif_tiff()
     exif = read_exif(tiff) if tiff is not None else None
-    plan = plan_repair(jf, exif, MTIME, RepairOptions(assume_charmera, NOW))
+    plan = plan_repair(jf, exif, MTIME, opts)
     if not plan.needs_rebuild:
         out = data
     else:
@@ -65,8 +72,9 @@ def repair(data: bytes, *, assume_charmera: bool = True) -> Outcome:
     result = Outcome(plan, out, read_exif(out_tiff))
     # Every output is stable: running again finds nothing to do.
     again = jpeg.parse(out)
-    rerun = plan_repair(again, read_exif(out_tiff), 0, RepairOptions(assume_charmera, NOW))
+    rerun = plan_repair(again, read_exif(out_tiff), 0, opts)
     assert rerun.status_hint == "already_valid", rerun.defects
+    assert set(rerun.warnings) <= set(plan.warnings), "a re-run adds no warning"
     return result
 
 
@@ -181,6 +189,85 @@ def test_no_assume_charmera(base_jpeg: bytes) -> None:
 
 def test_unknown_camera(base_jpeg: bytes) -> None:
     r = repair(base_jpeg)
+    assert r.plan.identity == "unknown"
+    assert r.tag("0th", 0x010F) is None
+
+
+def test_custom_target_on_assumed_file(base_jpeg: bytes) -> None:
+    r = repair(charmera_layout(base_jpeg), make="Acme", model="Snap 1")
+    assert r.plan.identity == "charmera(assumed)"
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == ("Acme", "Snap 1")
+    assert not r.plan.warnings
+
+
+def test_custom_target_rewrites_charmera_exif(base_jpeg: bytes) -> None:
+    r = repair(with_exif(base_jpeg, valid_tiff()), make="Acme", model="Snap 1")
+    assert r.plan.identity == "charmera(exif)"
+    assert r.plan.status_hint == "repaired"
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == ("Acme", "Snap 1")
+
+
+@pytest.mark.parametrize(
+    ("make", "model"), [("Acme", DEFAULT_MODEL), (DEFAULT_MAKE, "Snap 1")], ids=["make", "model"]
+)
+def test_custom_target_parts_are_independent(base_jpeg: bytes, make: str, model: str) -> None:
+    r = repair(charmera_layout(base_jpeg), make=make, model=model)
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == (make, model)
+
+
+@pytest.mark.parametrize(
+    ("make", "model"), [("Acme", "Other"), ("Other", "Snap 1")], ids=["make", "model"]
+)
+def test_assumed_file_with_one_part_at_target_is_kept_with_warning(
+    base_jpeg: bytes, make: str, model: str
+) -> None:
+    src = charmera_layout(with_exif(base_jpeg, valid_tiff(make=make, model=model)))
+    r = repair(src, make="Acme", model="Snap 1")
+    assert r.plan.identity == "charmera(assumed)"
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == (make, model)
+    assert any("kept" in w for w in r.plan.warnings)
+
+
+def test_custom_target_with_no_assume_charmera(base_jpeg: bytes) -> None:
+    r = repair(charmera_layout(base_jpeg), assume_charmera=False, make="Acme")
+    assert r.plan.identity == "generalplus-unconfirmed"
+    assert r.tag("0th", 0x010F) is None
+
+
+@pytest.mark.parametrize(
+    ("gpencoder", "identity", "warned"),
+    [(False, "unknown", False), (True, "charmera(assumed)", True)],
+    ids=["no-gpencoder", "gpencoder"],
+)
+def test_custom_target_output_on_a_later_default_run(
+    base_jpeg: bytes, gpencoder: bool, identity: str, warned: bool
+) -> None:
+    src = with_exif(base_jpeg, valid_tiff())
+    r = repair(charmera_layout(src) if gpencoder else src, make="Acme", model="Snap 1")
+    jf = jpeg.parse(r.out)
+    later = plan_repair(jf, read_exif(jf.exif_tiff() or b""), MTIME, RepairOptions(now=NOW))
+    assert later.identity == identity
+    assert later.status_hint == "already_valid"  # the custom Make/Model is kept
+    assert any("kept" in w for w in later.warnings) == warned
+
+
+def test_assumed_file_already_at_target_is_valid_without_warning(base_jpeg: bytes) -> None:
+    src = charmera_layout(with_exif(base_jpeg, valid_tiff(make="Acme", model="Snap 1")))
+    r = repair(src, make="Acme", model="Snap 1")
+    assert r.plan.identity == "charmera(assumed)"
+    assert r.plan.status_hint == "already_valid"
+    assert not r.plan.warnings
+
+
+def test_custom_target_keeps_foreign_make_with_warning(base_jpeg: bytes) -> None:
+    src = charmera_layout(with_exif(base_jpeg, valid_tiff(make="Other", model="Cam")))
+    r = repair(src, make="Acme", model="Snap 1")
+    assert r.tag("0th", 0x010F) == "Other"
+    assert any("Other" in w for w in r.plan.warnings)
+
+
+def test_custom_target_leaves_unknown_camera(base_jpeg: bytes) -> None:
+    r = repair(base_jpeg, make="Acme", model="Snap 1")
     assert r.plan.identity == "unknown"
     assert r.tag("0th", 0x010F) is None
 

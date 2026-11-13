@@ -24,6 +24,8 @@ root is the file's folder.
 | `--report` | none | Write the [JSON report](#report) to this path. |
 | `--no-preserve-structure` | mirror folders | Put every output directly in the output folder. |
 | `--no-assume-charmera` | assume | Turn off `charmera(assumed)` → [REPAIRS.md](REPAIRS.md#camera-identity). |
+| `--make` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Make: 1–64 printable ASCII characters, no leading or trailing space. |
+| `--model` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Model; same rules as `--make`. |
 | `--version` | — | Print the version and exit. |
 
 ## Exit codes
@@ -100,7 +102,7 @@ over the path, so an existing file there is replaced, never written through.
 | Key | Content |
 | -- | -- |
 | `tool`, `version` | `"charmfix"` and the package version. |
-| `options` | `recursive`, `preserve_structure`, `force`, `dry_run`, `assume_charmera`. |
+| `options` | `recursive`, `preserve_structure`, `force`, `dry_run`, `assume_charmera`, `make`, `model`. |
 | `summary` | The console summary counts, plus `processed`, `skipped_reasons` and `stopped`. |
 | `files[]` | One object per candidate: `rel_path`, `status`, `output`, `reason`, `error`, `sof_size`, `old_sizes`, `raw_date`, `date_written`, `timestamp_source`, `changes`, `exif_rebuilt`, `makernote`, `identity`, `private_text`, `partial_reasons`, `warnings`, `image_sha256`. |
 
@@ -109,4 +111,4 @@ over the path, so an existing file there is replaced, never written through.
 | Paths | Relative to the input root (`rel_path`) or output folder (`output`); never absolute. |
 | Errors | OS errors give only the error text, never the file name. |
 | Free text | UserComment, Artist and Copyright are reported only as `kept` / `dropped` in `private_text`. Their dropped values never appear in `changes`. |
-| Other tag values | Make, Model and dates appear as they are in `raw_date`, `changes` and `warnings`. |
+| Other tag values | Make, Model and dates appear as they are in `raw_date`, `changes` and `warnings`; the target Make and Model in `options`. |

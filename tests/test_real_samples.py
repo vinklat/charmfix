@@ -23,9 +23,10 @@ PLANTED = datetime(2026, 7, 14, 18, 45, 12)
 pytestmark = pytest.mark.skipif(not REAL_SAMPLES, reason="no real samples in tests/samples")
 
 
-def run_one(src: Path, out_dir: Path, **opts: bool) -> tuple[object, Path]:
+def run_one(src: Path, out_dir: Path, *, assume_charmera: bool = True) -> tuple[object, Path]:
     dest = out_dir / src.name
-    result = process_file(Job(Candidate(src, Path(src.name)), dest), RunOptions(out_dir, **opts))
+    opts = RunOptions(out_dir, assume_charmera=assume_charmera)
+    result = process_file(Job(Candidate(src, Path(src.name)), dest), opts)
     return result, dest
 
 

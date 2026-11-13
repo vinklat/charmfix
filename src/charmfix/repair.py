@@ -31,6 +31,9 @@ T_DATETIME_DIGITIZED = ("Exif", 0x9004)
 DATE_TAGS = (T_DATETIME_ORIGINAL, T_DATETIME_DIGITIZED, T_DATETIME)
 OFFSET_TIME_TAGS = (("Exif", 0x9010), ("Exif", 0x9011), ("Exif", 0x9012))
 
+DEFAULT_MAKE = "Kodak"
+DEFAULT_MODEL = "Charmera"
+
 T_MAKE = ("0th", 0x010F)
 T_MODEL = ("0th", 0x0110)
 T_ORIENTATION = ("0th", 0x0112)
@@ -154,10 +157,12 @@ def _mandatory(has_icc: bool) -> list[tuple[tuple[str, int], Any]]:
     ]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class RepairOptions:
     assume_charmera: bool = True
     now: datetime = field(default_factory=datetime.now)
+    make: str = DEFAULT_MAKE
+    model: str = DEFAULT_MODEL
 
 
 @dataclass(frozen=True)
@@ -474,7 +479,7 @@ def _apply_identity(plan: RepairPlan, jf: JpegFile, opts: RepairOptions) -> None
     gpencoder = any(c.rstrip(b"\x00").strip().startswith(b"GPEncoder") for c in jf.comments)
 
     def set_identity() -> None:
-        for (ifd, tag), target, old in ((T_MAKE, "Kodak", make), (T_MODEL, "Charmera", model)):
+        for (ifd, tag), target, old in ((T_MAKE, opts.make, make), (T_MODEL, opts.model, model)):
             if old != target:
                 plan.defects.append(f"{tag_name(ifd, tag)} is {old!r}")
                 plan.changes.append(Change(tag_name(ifd, tag), old or None, target))
@@ -485,7 +490,9 @@ def _apply_identity(plan: RepairPlan, jf: JpegFile, opts: RepairOptions) -> None
         set_identity()
     elif gpencoder and opts.assume_charmera:
         plan.identity = "charmera(assumed)"
-        if not make and not model:
+        blank = not make and not model
+        already_target = (make, model) == (opts.make, opts.model)
+        if blank or already_target:
             set_identity()
         else:
             plan.warnings.append(f"GPEncoder file has Make/Model {make!r}/{model!r}; kept")

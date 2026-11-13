@@ -12,6 +12,7 @@ from typing import TextIO
 from . import __version__
 from .discovery import unreadable_reason
 from .pipeline import DiskFullError, Job, RunOptions, prepare, process_file
+from .repair import DEFAULT_MAKE, DEFAULT_MODEL
 from .report import FileResult, Summary, build_report, write_report
 
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Kodak Charmera Repaired"
@@ -21,6 +22,7 @@ MACOS_PERMISSION_HINT = (
     "Removable Volumes (or Full Disk Access), then restart that app and try again."
 )
 EXIT_OK, EXIT_FAILURES, EXIT_FATAL, EXIT_INTERRUPTED = 0, 1, 2, 130
+MAX_CAMERA_TEXT = 64
 
 log = logging.getLogger("charmfix")
 
@@ -52,6 +54,17 @@ class _ProgressAwareHandler(logging.StreamHandler):  # type: ignore[type-arg]
     def emit(self, record: logging.LogRecord) -> None:
         self.progress.clear()
         super().emit(record)
+
+
+def _camera_text(value: str) -> str:
+    """A --make/--model value: 1-64 printable ASCII characters, no leading or trailing space."""
+    if not 1 <= len(value) <= MAX_CAMERA_TEXT:
+        raise argparse.ArgumentTypeError(f"must be 1-{MAX_CAMERA_TEXT} characters")
+    if not (value.isascii() and value.isprintable()) or value != value.strip():
+        raise argparse.ArgumentTypeError(
+            "must be printable ASCII without leading or trailing spaces"
+        )
+    return value
 
 
 def _parser() -> argparse.ArgumentParser:
@@ -88,7 +101,21 @@ def _parser() -> argparse.ArgumentParser:
         "--no-assume-charmera",
         dest="assume_charmera",
         action="store_false",
-        help="do not set Make/Model to Kodak/Charmera on files with only a GPEncoder comment",
+        help="do not set the camera Make/Model on files with only a GPEncoder comment",
+    )
+    p.add_argument(
+        "--make",
+        type=_camera_text,
+        default=DEFAULT_MAKE,
+        metavar="TEXT",
+        help=f"camera Make to write (default: {DEFAULT_MAKE})",
+    )
+    p.add_argument(
+        "--model",
+        type=_camera_text,
+        default=DEFAULT_MODEL,
+        metavar="TEXT",
+        help=f"camera Model to write (default: {DEFAULT_MODEL})",
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
@@ -183,6 +210,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         force=args.force,
         dry_run=args.dry_run,
         assume_charmera=args.assume_charmera,
+        make=args.make,
+        model=args.model,
     )
     input_root = input_path if is_folder else input_path.parent
     reason = unreadable_reason(input_root)

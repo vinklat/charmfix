@@ -65,10 +65,15 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 
 | Identity | When | Make / Model |
 | -- | -- | -- |
-| `charmera(exif)` | Make or Model contains "charmera" (any case) | Set to `Kodak` / `Charmera`. |
-| `charmera(assumed)` | `GPEncoder` comment, default options | Set to `Kodak` / `Charmera` when both are empty; otherwise kept with a warning. |
+| `charmera(exif)` | Make or Model contains "charmera" (any case) | Set to the target. |
+| `charmera(assumed)` | `GPEncoder` comment, default options | Set to the target when Make and Model are both empty or both equal the target; otherwise kept with a warning. |
 | `generalplus-unconfirmed` | `GPEncoder` comment with `--no-assume-charmera` | Left as they are. |
 | `unknown` | Anything else | Left as they are. |
+
+| Target | Default | Option → [CLI.md](CLI.md#options) |
+| -- | -- | -- |
+| Make | `Kodak` | `--make` |
+| Model | `Charmera` | `--model` |
 
 ## Defects
 

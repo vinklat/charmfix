@@ -20,7 +20,7 @@ from .output import (
     check_inside,
     write_atomic,
 )
-from .repair import RepairOptions, RepairPlan, plan_repair
+from .repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, RepairPlan, plan_repair
 from .report import FileResult
 from .verify import VerificationError, verify_output
 
@@ -39,9 +39,11 @@ class RunOptions:
     force: bool = False
     dry_run: bool = False
     assume_charmera: bool = True
+    make: str = DEFAULT_MAKE
+    model: str = DEFAULT_MODEL
 
-    def report_options(self) -> dict[str, bool]:
-        """The flags for the JSON report: everything but the output folder (no paths)."""
+    def report_options(self) -> dict[str, bool | str]:
+        """The options for the JSON report: everything but the output folder (no paths)."""
         return {k: v for k, v in asdict(self).items() if k != "output_root"}
 
 
@@ -126,7 +128,10 @@ def _process(job: Job, opts: RunOptions, result: FileResult, now: datetime) -> N
         st = os.fstat(f.fileno())
         data = f.read()
 
-    jf, plan, out = rebuild(data, st.st_mtime, RepairOptions(opts.assume_charmera, now))
+    repair_opts = RepairOptions(
+        assume_charmera=opts.assume_charmera, now=now, make=opts.make, model=opts.model
+    )
+    jf, plan, out = rebuild(data, st.st_mtime, repair_opts)
     result.sof_size = (jf.width, jf.height)
     result.image_sha256 = jpeg.image_digest(jf)
     result.old_sizes = plan.old_sizes
