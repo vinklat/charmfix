@@ -170,7 +170,6 @@ def check_camera_text(value: str) -> str:
 @dataclass(frozen=True, kw_only=True)
 class RepairOptions:
     assume_charmera: bool = True
-    now: datetime = field(default_factory=datetime.now)
     make: str = DEFAULT_MAKE
     model: str = DEFAULT_MODEL
 
@@ -299,6 +298,7 @@ def plan_repair(
     jf: JpegFile,
     exif: ExifData | None,
     src_mtime: float,
+    now: datetime,
     opts: RepairOptions | None = None,
     *,
     exif_segment_count: int | None = None,
@@ -362,7 +362,7 @@ def plan_repair(
                 continue
             new[ifd][tag] = value
 
-    _apply_dates(plan, src, src_mtime, opts)
+    _apply_dates(plan, src, src_mtime, now)
     _apply_sizes(plan, jf)
 
     if T_ORIENTATION[1] not in new["0th"]:
@@ -416,7 +416,7 @@ def _show(value: Any) -> str:
 
 
 def _apply_dates(
-    plan: RepairPlan, src: dict[str, dict[int, RawValue]], src_mtime: float, opts: RepairOptions
+    plan: RepairPlan, src: dict[str, dict[int, RawValue]], src_mtime: float, now: datetime
 ) -> None:
     raws: dict[tuple[str, int], bytes | None] = {}
     for key in DATE_TAGS:
@@ -464,7 +464,7 @@ def _apply_dates(
     for key in OFFSET_TIME_TAGS:
         if key[1] in src.get(key[0], {}):
             plan.changes.append(Change(tag_name(*key), note="dropped: dates rewritten"))
-    warning = dates.sanity_warning(capture, opts.now)
+    warning = dates.sanity_warning(capture, now)
     if warning:
         plan.warnings.append(warning)
 
