@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -28,7 +29,15 @@ from helpers import (
 from charmfix import jpeg
 from charmfix.exif_read import ExifData, read_exif
 from charmfix.exif_write import build_exif
-from charmfix.repair import RepairOptions, RepairPlan, plan_repair
+from charmfix.repair import (
+    DEFAULT_MAKE,
+    DEFAULT_MODEL,
+    MAX_TARGET_LENGTH,
+    RepairOptions,
+    RepairPlan,
+    check_target_text,
+    plan_repair,
+)
 from charmfix.verify import verify_output
 
 MTIME = datetime(2026, 5, 1, 10, 20, 30).timestamp()
@@ -50,11 +59,18 @@ class Outcome:
         return rv.value[0] if len(rv.value) == 1 else rv.value
 
 
-def repair(data: bytes, *, assume_charmera: bool = True) -> Outcome:
+def repair(
+    data: bytes,
+    *,
+    assume_charmera: bool = True,
+    make: str = DEFAULT_MAKE,
+    model: str = DEFAULT_MODEL,
+) -> Outcome:
+    opts = RepairOptions(assume_charmera=assume_charmera, make=make, model=model)
     jf = jpeg.parse(data)
     tiff = jf.exif_tiff()
     exif = read_exif(tiff) if tiff is not None else None
-    plan = plan_repair(jf, exif, MTIME, RepairOptions(assume_charmera, NOW))
+    plan = plan_repair(jf, exif, MTIME, NOW, opts)
     if not plan.needs_rebuild:
         out = data
     else:
@@ -65,9 +81,20 @@ def repair(data: bytes, *, assume_charmera: bool = True) -> Outcome:
     result = Outcome(plan, out, read_exif(out_tiff))
     # Every output is stable: running again finds nothing to do.
     again = jpeg.parse(out)
-    rerun = plan_repair(again, read_exif(out_tiff), 0, RepairOptions(assume_charmera, NOW))
+    rerun = plan_repair(again, read_exif(out_tiff), 0, NOW, opts)
     assert rerun.status_hint == "already_valid", rerun.defects
+    assert set(rerun.warnings) <= set(plan.warnings), "a re-run adds no warning"
     return result
+
+
+def as_is(data: bytes) -> bytes:
+    """A layout that leaves the JPEG as built (no GPEncoder comment)."""
+    return data
+
+
+def kodak_exif(data: bytes) -> bytes:
+    """Adds valid Kodak/Charmera EXIF, unlike the pure layouts; no GPEncoder comment."""
+    return with_exif(data, valid_tiff())
 
 
 # 1
@@ -164,6 +191,78 @@ def test_charmera_in_exif_is_normalized(base_jpeg: bytes) -> None:
     assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == ("Kodak", "Charmera")
 
 
+# Target Make/Model → REPAIRS.md#camera-identity
+KODAK = (DEFAULT_MAKE, DEFAULT_MODEL)
+ACME = ("Acme", "Snap 1")
+
+
+@pytest.mark.parametrize(
+    ("layout", "target", "stored", "written", "changes", "identity"),
+    [
+        pytest.param(
+            as_is,
+            KODAK,
+            ("Kodak ", " Charmera"),
+            ("Kodak ", " Charmera"),
+            [],
+            "charmera(exif)",
+            id="charmera-exif",
+        ),
+        pytest.param(
+            charmera_layout,
+            ACME,
+            ("Acme ", " Snap 1"),
+            ("Acme ", " Snap 1"),
+            [],
+            "charmera(assumed)",
+            id="charmera-assumed",
+        ),
+        pytest.param(
+            as_is,
+            KODAK,
+            ("Kodak ", "charmera v1"),
+            ("Kodak ", "Charmera"),
+            ["0th.Model: charmera v1 -> Charmera"],
+            "charmera(exif)",
+            id="other-part-differs",
+        ),
+    ],
+)
+def test_value_equal_to_target_is_kept_as_stored(
+    base_jpeg: bytes,
+    layout: Callable[[bytes], bytes],
+    target: tuple[str, str],
+    stored: tuple[str, str],
+    written: tuple[str, str],
+    changes: list[str],
+    identity: str,
+) -> None:
+    """Padding is not a difference, per field, even when another defect forces a rebuild."""
+    src = layout(with_exif(base_jpeg, valid_tiff(640, make=stored[0], model=stored[1])))
+    r = repair(src, make=target[0], model=target[1])
+    assert (r.plan.identity, r.plan.status_hint) == (identity, "repaired")
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == written
+    assert [str(c) for c in r.plan.changes if c.field in ("0th.Make", "0th.Model")] == changes
+    assert not r.plan.warnings
+
+
+@pytest.mark.parametrize(
+    ("layout", "target"),
+    [pytest.param(as_is, KODAK, id="exif"), pytest.param(charmera_layout, ACME, id="assumed")],
+)
+def test_trailing_nuls_are_not_a_difference(
+    base_jpeg: bytes, layout: Callable[[bytes], bytes], target: tuple[str, str]
+) -> None:
+    """NUL padding is normalised on output, so only the absence of a change shows it was kept."""
+    stored = (f"{target[0]}\x00\x00", f"{target[1]}\x00")  # on top of the terminating NUL
+    src = layout(with_exif(base_jpeg, valid_tiff(640, make=stored[0], model=stored[1])))
+    r = repair(src, make=target[0], model=target[1])
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == target
+    assert not [c for c in r.plan.changes if c.field in ("0th.Make", "0th.Model")]
+    assert not [d for d in r.plan.defects if "Make" in d or "Model" in d]
+    assert not r.plan.warnings
+
+
 # 11
 def test_gpencoder_with_other_make_is_kept_with_warning(base_jpeg: bytes) -> None:
     src = charmera_layout(with_exif(base_jpeg, valid_tiff(make="Acme", model="Cam")))
@@ -173,16 +272,179 @@ def test_gpencoder_with_other_make_is_kept_with_warning(base_jpeg: bytes) -> Non
     assert any("Acme" in w for w in r.plan.warnings)
 
 
-def test_no_assume_charmera(base_jpeg: bytes) -> None:
-    r = repair(charmera_layout(base_jpeg), assume_charmera=False)
-    assert r.plan.identity == "generalplus-unconfirmed"
-    assert r.tag("0th", 0x010F) is None
+NOT_WRITTEN = (None, None)
 
 
-def test_unknown_camera(base_jpeg: bytes) -> None:
-    r = repair(base_jpeg)
-    assert r.plan.identity == "unknown"
-    assert r.tag("0th", 0x010F) is None
+@pytest.mark.parametrize(
+    ("layout", "assume", "target", "written", "identity"),
+    [
+        pytest.param(charmera_layout, True, ACME, ACME, "charmera(assumed)", id="assumed"),
+        pytest.param(
+            charmera_layout,
+            True,
+            ("Acme", DEFAULT_MODEL),
+            ("Acme", DEFAULT_MODEL),
+            "charmera(assumed)",
+            id="assumed-make-only",
+        ),
+        pytest.param(
+            charmera_layout,
+            True,
+            (DEFAULT_MAKE, "Snap 1"),
+            (DEFAULT_MAKE, "Snap 1"),
+            "charmera(assumed)",
+            id="assumed-model-only",
+        ),
+        pytest.param(kodak_exif, True, ACME, ACME, "charmera(exif)", id="exif"),
+        pytest.param(
+            charmera_layout, False, KODAK, NOT_WRITTEN, "generalplus-unconfirmed", id="unconfirmed"
+        ),
+        pytest.param(
+            charmera_layout,
+            False,
+            ACME,
+            NOT_WRITTEN,
+            "generalplus-unconfirmed",
+            id="unconfirmed-custom",
+        ),
+        pytest.param(as_is, True, KODAK, NOT_WRITTEN, "unknown", id="unknown"),
+        pytest.param(as_is, True, ACME, NOT_WRITTEN, "unknown", id="unknown-custom"),
+    ],
+)
+def test_target_is_written_only_for_charmera_identities(
+    base_jpeg: bytes,
+    layout: Callable[[bytes], bytes],
+    assume: bool,
+    target: tuple[str, str],
+    written: tuple[str | None, str | None],
+    identity: str,
+) -> None:
+    """A charmera identity gets the target Make/Model; the others are left without one."""
+    r = repair(layout(base_jpeg), assume_charmera=assume, make=target[0], model=target[1])
+    assert r.plan.identity == identity
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == written
+    assert not r.plan.warnings
+
+
+@pytest.mark.parametrize(
+    ("make", "status", "makernote", "unknown_kept"),
+    [
+        (DEFAULT_MAKE, "already_valid", "kept", True),
+        ("Acme", "repaired", "discarded(not relocatable)", False),
+    ],
+    ids=["default-target", "other-target"],
+)
+def test_valid_file_is_rebuilt_only_for_another_target(
+    base_jpeg: bytes, make: str, status: str, makernote: str, unknown_kept: bool
+) -> None:
+    exif = [*standard_exif_entries(), long_(0xA002, 64), long_(0xA003, 48)]
+    unknown = ascii_(0xC000, "x")  # not in piexif's table: rule 5
+    tiff = build_tiff(standard_ifd0_entries(), [*exif, E(0x927C, 7, 16, b"M" * 16), unknown])
+    r = repair(with_exif(base_jpeg, tiff), make=make)
+    assert (r.plan.status_hint, r.plan.makernote_status) == (status, makernote)
+    assert (r.tag("Exif", 0xC000) is not None) == unknown_kept
+
+
+@pytest.mark.parametrize(
+    ("make", "model"),
+    [("Acme", "Other"), ("Other", "Snap 1"), ("Other", "Cam"), ("Acme", ""), ("", "Snap 1")],
+    ids=["make-matches", "model-matches", "neither-matches", "model-empty", "make-empty"],
+)
+def test_assumed_file_not_at_target_is_kept_with_warning(
+    base_jpeg: bytes, make: str, model: str
+) -> None:
+    src = charmera_layout(with_exif(base_jpeg, valid_tiff(make=make, model=model)))
+    r = repair(src, make="Acme", model="Snap 1")
+    assert r.plan.identity == "charmera(assumed)"
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == (make, model)
+    assert any(f"{make!r}/{model!r}; kept" in w for w in r.plan.warnings)
+
+
+@pytest.mark.parametrize(
+    ("layout", "model", "identity", "status", "changes", "warned"),
+    [
+        pytest.param(as_is, "Snap 1", "unknown", "already_valid", [], False, id="other-target"),
+        pytest.param(
+            charmera_layout,
+            "Snap 1",
+            "charmera(assumed)",
+            "already_valid",
+            [],
+            True,
+            id="gpencoder",
+        ),
+        pytest.param(
+            as_is,
+            DEFAULT_MODEL,
+            "charmera(exif)",
+            "repaired",
+            ["0th.Make: Acme -> Kodak"],
+            False,
+            id="charmera",
+        ),
+        pytest.param(
+            charmera_layout,
+            DEFAULT_MODEL,
+            "charmera(exif)",
+            "repaired",
+            ["0th.Make: Acme -> Kodak"],
+            False,
+            id="charmera-gpencoder",
+        ),
+    ],
+)
+def test_custom_target_output_on_a_later_default_run(
+    base_jpeg: bytes,
+    layout: Callable[[bytes], bytes],
+    model: str,
+    identity: str,
+    status: str,
+    changes: list[str],
+    warned: bool,
+) -> None:
+    """REPAIRS.md Later run: a custom-target output, repaired again with the default target."""
+    r = repair(layout(with_exif(base_jpeg, valid_tiff())), make="Acme", model=model)
+    later = repair(r.out).plan
+    assert (later.identity, later.status_hint) == (identity, status)
+    assert [str(c) for c in later.changes] == changes  # kept, or set back to the default
+    assert any("kept" in w for w in later.warnings) == warned
+
+
+def test_assumed_file_already_at_target_is_valid_without_warning(base_jpeg: bytes) -> None:
+    src = charmera_layout(with_exif(base_jpeg, valid_tiff(make="Acme", model="Snap 1")))
+    r = repair(src, make="Acme", model="Snap 1")
+    assert r.plan.identity == "charmera(assumed)"
+    assert r.plan.status_hint == "already_valid"
+    assert not r.plan.warnings
+
+
+# Target text rule → REPAIRS.md#camera-identity
+@pytest.mark.parametrize("value", ["A", "Snap 1", "~", "A" * MAX_TARGET_LENGTH])
+def test_target_text_accepted(value: str) -> None:
+    assert check_target_text(value) == value
+    opts = RepairOptions(make=value, model=value)
+    assert (opts.make, opts.model) == (value, value)
+
+
+@pytest.mark.parametrize(
+    ("value", "message"),
+    [
+        pytest.param("", "1-64 characters", id="empty"),
+        pytest.param("A" * (MAX_TARGET_LENGTH + 1), "1-64 characters", id="too-long"),
+        pytest.param(" Acme", "printable ASCII", id="leading-space"),
+        pytest.param("Acme ", "printable ASCII", id="trailing-space"),
+        pytest.param("Ačme", "printable ASCII", id="non-ascii"),
+        pytest.param("Ac\tme", "printable ASCII", id="control"),
+        pytest.param("Ac\x7fme", "printable ASCII", id="del"),
+    ],
+)
+def test_target_text_rejected(value: str, message: str) -> None:
+    with pytest.raises(ValueError, match=f"^must be .*{message}"):
+        check_target_text(value)
+    with pytest.raises(ValueError, match=f"^make must be .*{message}"):
+        RepairOptions(make=value)
+    with pytest.raises(ValueError, match=f"^model must be .*{message}"):
+        RepairOptions(model=value)
 
 
 # 12
@@ -215,7 +477,7 @@ def test_broken_thumbnail_dropped(base_jpeg: bytes) -> None:
 def test_dnl_height_is_partial_without_size_tags(base_jpeg: bytes) -> None:
     src = with_exif(set_sof_height(base_jpeg, 0), broken_charmera_tiff())
     jf = jpeg.parse(src)
-    plan = plan_repair(jf, read_exif(jf.exif_tiff() or b""), MTIME, RepairOptions(now=NOW))
+    plan = plan_repair(jf, read_exif(jf.exif_tiff() or b""), MTIME, NOW, RepairOptions())
     assert plan.status_hint == "partial"
     out = jpeg.splice(jf, build_exif(plan))
     verify_output(jf, out, plan)

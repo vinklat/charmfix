@@ -9,6 +9,7 @@ import sys
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import fields
 from datetime import datetime
 from pathlib import Path
 
@@ -28,6 +29,8 @@ from helpers import (
 )
 
 from charmfix import cli, jpeg, pipeline
+from charmfix.exif_read import read_exif
+from charmfix.repair import RepairOptions
 
 MTIME = datetime(2026, 4, 2, 8, 30, 0).timestamp()
 OVERLAP = "input and output folders must not overlap"
@@ -136,6 +139,7 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
 
     report = json.loads(report_path.read_text())
     assert report["options"] == pipeline.RunOptions(out).report_options()  # defaults
+    assert (report["options"]["make"], report["options"]["model"]) == ("Kodak", "Charmera")
     by_path = {f["rel_path"]: f for f in report["files"]}
     assert set(by_path) == {
         "DCIM/model_1987/PICT0010.jpg",
@@ -256,10 +260,26 @@ def test_flatten_and_no_recursion(card: Path, tmp_path: Path) -> None:
     assert not out2.exists()  # no JPEGs directly in DCIM
 
 
-def test_report_options_are_flags_only() -> None:
-    """A path (or any non-flag) field must never reach the report without a privacy decision."""
+# Non-flag options cleared for the report → CLI.md#report (privacy rules).
+REPORT_TEXT_OPTIONS = {"make", "model"}
+
+
+def test_report_options_are_flags_or_cleared_text() -> None:
+    """A path (or any non-flag) field must never reach the report without a privacy decision.
+
+    New keys of any type also fail test_docs.py::test_report_keys_match_code until CLI.md lists
+    them; this test guards their type.
+    """
     options = pipeline.RunOptions(Path("/abs/out")).report_options()
-    assert options and all(type(value) is bool for value in options.values())
+    text = {k for k, v in options.items() if type(v) is not bool}
+    assert options and text == REPORT_TEXT_OPTIONS
+    assert all(type(options[k]) is str for k in text)
+
+
+def test_report_option_names_do_not_collide() -> None:
+    """report_options() merges two dataclasses; a shared name would drop one value silently."""
+    run = {f.name for f in fields(pipeline.RunOptions)}
+    assert not run & {f.name for f in fields(RepairOptions)}
 
 
 def test_single_file_input(tmp_path: Path) -> None:
@@ -290,6 +310,31 @@ def test_no_assume_charmera_flag(card: Path, tmp_path: Path) -> None:
     )
     (entry,) = json.loads(report.read_text())["files"]
     assert entry["identity"] == "generalplus-unconfirmed"
+
+
+def test_custom_make_and_model(tmp_path: Path) -> None:
+    src, out, report = single_jpeg(tmp_path), tmp_path / "out", tmp_path / "r.json"
+    assert run(src, "-o", out, "--make", "Acme", "--model", "Snap 1", "--report", report) == 0
+    tiff = jpeg.parse((out / "x.jpg").read_bytes()).exif_tiff()
+    assert tiff is not None
+    exif = read_exif(tiff)
+    written = [exif.get("0th", tag) for tag in (0x010F, 0x0110)]
+    assert [rv and rv.value for rv in written] == [b"Acme\x00", b"Snap 1\x00"]
+    options = json.loads(report.read_text())["options"]
+    assert (options["make"], options["model"]) == ("Acme", "Snap 1")
+
+
+@pytest.mark.parametrize("option", ["--make", "--model"])
+def test_camera_option_rejection_is_a_usage_error(
+    tmp_path: Path, option: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    src, out = single_jpeg(tmp_path), tmp_path / "out"
+    with pytest.raises(SystemExit) as exc:
+        run(src, "-o", out, option, " Acme")
+    assert exc.value.code == cli.EXIT_FATAL
+    err = capsys.readouterr().err
+    assert f"argument {option}: must be printable ASCII" in err  # field named once
+    assert not out.exists()
 
 
 @pytest.mark.parametrize(

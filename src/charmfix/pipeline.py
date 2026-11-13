@@ -5,7 +5,7 @@ from __future__ import annotations
 import errno
 import logging
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from pathlib import Path
 
@@ -38,11 +38,13 @@ class RunOptions:
     preserve_structure: bool = True
     force: bool = False
     dry_run: bool = False
-    assume_charmera: bool = True
+    # RepairOptions validates its target text when built: before any file is planned.
+    repair: RepairOptions = field(default_factory=RepairOptions)
 
-    def report_options(self) -> dict[str, bool]:
-        """The flags for the JSON report: everything but the output folder (no paths)."""
-        return {k: v for k, v in asdict(self).items() if k != "output_root"}
+    def report_options(self) -> dict[str, bool | str]:
+        """The options for the JSON report, flat and without the output folder (a path)."""
+        run = {k: v for k, v in asdict(self).items() if k not in ("output_root", "repair")}
+        return run | asdict(self.repair)
 
 
 @dataclass(frozen=True)
@@ -65,7 +67,7 @@ def _error_text(exc: BaseException) -> str:
 
 
 def rebuild(
-    data: bytes, src_mtime: float, options: RepairOptions
+    data: bytes, src_mtime: float, now: datetime, options: RepairOptions
 ) -> tuple[jpeg.JpegFile, RepairPlan, bytes]:
     """Analyse one file in memory and return the verified output bytes.
 
@@ -75,7 +77,7 @@ def rebuild(
     jf = jpeg.parse(data)
     tiff = jf.exif_tiff()
     exif = read_exif(tiff) if tiff is not None else None
-    plan = plan_repair(jf, exif, src_mtime, options)
+    plan = plan_repair(jf, exif, src_mtime, now, options)
     if not plan.needs_rebuild:
         return jf, plan, data  # already valid: byte-for-byte copy
     out = jpeg.splice(jf, build_exif(plan))
@@ -126,7 +128,7 @@ def _process(job: Job, opts: RunOptions, result: FileResult, now: datetime) -> N
         st = os.fstat(f.fileno())
         data = f.read()
 
-    jf, plan, out = rebuild(data, st.st_mtime, RepairOptions(opts.assume_charmera, now))
+    jf, plan, out = rebuild(data, st.st_mtime, now, opts.repair)
     result.sof_size = (jf.width, jf.height)
     result.image_sha256 = jpeg.image_digest(jf)
     result.old_sizes = plan.old_sizes

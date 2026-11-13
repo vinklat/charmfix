@@ -31,6 +31,10 @@ T_DATETIME_DIGITIZED = ("Exif", 0x9004)
 DATE_TAGS = (T_DATETIME_ORIGINAL, T_DATETIME_DIGITIZED, T_DATETIME)
 OFFSET_TIME_TAGS = (("Exif", 0x9010), ("Exif", 0x9011), ("Exif", 0x9012))
 
+DEFAULT_MAKE = "Kodak"
+DEFAULT_MODEL = "Charmera"
+MAX_TARGET_LENGTH = 64
+
 T_MAKE = ("0th", 0x010F)
 T_MODEL = ("0th", 0x0110)
 T_ORIENTATION = ("0th", 0x0112)
@@ -154,10 +158,27 @@ def _mandatory(has_icc: bool) -> list[tuple[tuple[str, int], Any]]:
     ]
 
 
-@dataclass(frozen=True)
+def check_target_text(value: str) -> str:
+    """A valid target Make or Model (REPAIRS.md, camera identity); otherwise ValueError."""
+    if not 1 <= len(value) <= MAX_TARGET_LENGTH:
+        raise ValueError(f"must be 1-{MAX_TARGET_LENGTH} characters")
+    if not (value.isascii() and value.isprintable()) or value != value.strip():
+        raise ValueError("must be printable ASCII without leading or trailing spaces")
+    return value
+
+
+@dataclass(frozen=True, kw_only=True)
 class RepairOptions:
     assume_charmera: bool = True
-    now: datetime = field(default_factory=datetime.now)
+    make: str = DEFAULT_MAKE
+    model: str = DEFAULT_MODEL
+
+    def __post_init__(self) -> None:
+        for name, value in (("make", self.make), ("model", self.model)):
+            try:
+                check_target_text(value)
+            except ValueError as exc:
+                raise ValueError(f"{name} {exc}") from None
 
 
 @dataclass(frozen=True)
@@ -277,11 +298,9 @@ def plan_repair(
     jf: JpegFile,
     exif: ExifData | None,
     src_mtime: float,
-    opts: RepairOptions | None = None,
-    *,
-    exif_segment_count: int | None = None,
+    now: datetime,
+    options: RepairOptions,
 ) -> RepairPlan:
-    opts = opts or RepairOptions()
     src: dict[str, dict[int, RawValue]] = exif.ifds if exif else {}
     new: dict[str, dict[int, Any]] = {"0th": {}, "Exif": {}, "GPS": {}, "1st": {}}
     plan = RepairPlan(
@@ -315,7 +334,7 @@ def plan_repair(
             plan.partial_reasons.append("unreadable EXIF block rebuilt from nothing")
         for w in exif.warnings:
             defect(w)
-    n_exif = exif_segment_count if exif_segment_count is not None else len(jf.exif_segments)
+    n_exif = len(jf.exif_segments)
     if n_exif > 1:
         defect(f"{n_exif} Exif APP1 segments")
 
@@ -340,7 +359,7 @@ def plan_repair(
                 continue
             new[ifd][tag] = value
 
-    _apply_dates(plan, src, src_mtime, opts)
+    _apply_dates(plan, src, src_mtime, now)
     _apply_sizes(plan, jf)
 
     if T_ORIENTATION[1] not in new["0th"]:
@@ -355,7 +374,7 @@ def plan_repair(
             change(Change(name, None, _show(default)))
             new[ifd][tag] = default
 
-    _apply_identity(plan, jf, opts)
+    _apply_identity(plan, jf, options)
     _apply_thumbnail(plan, exif, src)
 
     if exif is not None:
@@ -394,7 +413,7 @@ def _show(value: Any) -> str:
 
 
 def _apply_dates(
-    plan: RepairPlan, src: dict[str, dict[int, RawValue]], src_mtime: float, opts: RepairOptions
+    plan: RepairPlan, src: dict[str, dict[int, RawValue]], src_mtime: float, now: datetime
 ) -> None:
     raws: dict[tuple[str, int], bytes | None] = {}
     for key in DATE_TAGS:
@@ -442,7 +461,7 @@ def _apply_dates(
     for key in OFFSET_TIME_TAGS:
         if key[1] in src.get(key[0], {}):
             plan.changes.append(Change(tag_name(*key), note="dropped: dates rewritten"))
-    warning = dates.sanity_warning(capture, opts.now)
+    warning = dates.sanity_warning(capture, now)
     if warning:
         plan.warnings.append(warning)
 
@@ -470,25 +489,33 @@ def _apply_sizes(plan: RepairPlan, jf: JpegFile) -> None:
 
 def _apply_identity(plan: RepairPlan, jf: JpegFile, opts: RepairOptions) -> None:
     zeroth = plan.ifds["0th"]
-    make, model = _ascii(zeroth.get(T_MAKE[1])), _ascii(zeroth.get(T_MODEL[1]))
+    stored_make = _ascii(zeroth.get(T_MAKE[1]))
+    stored_model = _ascii(zeroth.get(T_MODEL[1]))
     gpencoder = any(c.rstrip(b"\x00").strip().startswith(b"GPEncoder") for c in jf.comments)
 
     def set_identity() -> None:
-        for (ifd, tag), target, old in ((T_MAKE, "Kodak", make), (T_MODEL, "Charmera", model)):
-            if old != target:
-                plan.defects.append(f"{tag_name(ifd, tag)} is {old!r}")
-                plan.changes.append(Change(tag_name(ifd, tag), old or None, target))
-            zeroth[tag] = target.encode()
+        for (ifd, tag), target, stored in (
+            (T_MAKE, opts.make, stored_make),
+            (T_MODEL, opts.model, stored_model),
+        ):
+            if stored != target:  # per field: a value equal to the target is kept as stored
+                plan.defects.append(f"{tag_name(ifd, tag)} is {stored!r}")
+                plan.changes.append(Change(tag_name(ifd, tag), stored or None, target))
+                zeroth[tag] = target.encode()
 
-    if "charmera" in f"{make} {model}".lower():
+    if "charmera" in f"{stored_make} {stored_model}".lower():
         plan.identity = "charmera(exif)"
         set_identity()
     elif gpencoder and opts.assume_charmera:
         plan.identity = "charmera(assumed)"
-        if not make and not model:
+        if not stored_make and not stored_model:
             set_identity()
+        elif (stored_make, stored_model) == (opts.make, opts.model):
+            pass  # already at the target: kept as stored, no warning
         else:
-            plan.warnings.append(f"GPEncoder file has Make/Model {make!r}/{model!r}; kept")
+            plan.warnings.append(
+                f"GPEncoder file has Make/Model {stored_make!r}/{stored_model!r}; kept"
+            )
     elif gpencoder:
         plan.identity = "generalplus-unconfirmed"
 

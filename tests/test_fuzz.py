@@ -31,7 +31,7 @@ SEEDS = [
 if REAL_SAMPLES:
     SEEDS.append(REAL_SAMPLES[0].read_bytes()[:4096])  # header + some scan data
 TIFFS = [broken_charmera_tiff(), valid_tiff()]
-OPTIONS = RepairOptions(now=datetime(2026, 11, 6))
+NOW = datetime(2026, 11, 6)
 EXPECTED = (jpeg.JpegError, ExifTooLargeError, VerificationError)
 
 
@@ -50,7 +50,7 @@ def damaged(draw: st.DrawFn, seeds: list[bytes]) -> bytes:
 @given(damaged(SEEDS))
 def test_rebuild_never_crashes(data: bytes) -> None:
     try:
-        _, _, out = rebuild(data, 1_700_000_000, OPTIONS)
+        _, _, out = rebuild(data, 1_700_000_000, NOW, RepairOptions())
     except EXPECTED:
         return
     # Whatever succeeded must have kept the image data.

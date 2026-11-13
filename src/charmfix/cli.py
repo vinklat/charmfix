@@ -12,6 +12,7 @@ from typing import TextIO
 from . import __version__
 from .discovery import unreadable_reason
 from .pipeline import DiskFullError, Job, RunOptions, prepare, process_file
+from .repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, check_target_text
 from .report import FileResult, Summary, build_report, write_report
 
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Kodak Charmera Repaired"
@@ -54,6 +55,14 @@ class _ProgressAwareHandler(logging.StreamHandler):  # type: ignore[type-arg]
         super().emit(record)
 
 
+def _target_text(value: str) -> str:
+    """argparse type for --make/--model: the repair rule, reported as a usage error."""
+    try:
+        return check_target_text(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
+
+
 def _parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="charmfix",
@@ -88,7 +97,21 @@ def _parser() -> argparse.ArgumentParser:
         "--no-assume-charmera",
         dest="assume_charmera",
         action="store_false",
-        help="do not set Make/Model to Kodak/Charmera on files with only a GPEncoder comment",
+        help="do not set the camera Make/Model on files with only a GPEncoder comment",
+    )
+    p.add_argument(
+        "--make",
+        type=_target_text,
+        default=DEFAULT_MAKE,
+        metavar="TEXT",
+        help=f"camera Make written to Charmera files (default: {DEFAULT_MAKE})",
+    )
+    p.add_argument(
+        "--model",
+        type=_target_text,
+        default=DEFAULT_MODEL,
+        metavar="TEXT",
+        help=f"camera Model written to Charmera files (default: {DEFAULT_MODEL})",
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
@@ -182,7 +205,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         preserve_structure=args.preserve_structure,
         force=args.force,
         dry_run=args.dry_run,
-        assume_charmera=args.assume_charmera,
+        repair=RepairOptions(
+            assume_charmera=args.assume_charmera, make=args.make, model=args.model
+        ),
     )
     input_root = input_path if is_folder else input_path.parent
     reason = unreadable_reason(input_root)

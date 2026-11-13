@@ -55,7 +55,7 @@ def repaired(
     thumb = io.BytesIO()
     Image.new("RGB", (16, 12), "blue").save(thumb, "JPEG")
     src = FIXTURES[request.param](base_jpeg, thumb.getvalue())
-    _, _, out = rebuild(src, MTIME, RepairOptions(now=datetime(2026, 11, 6)))
+    _, _, out = rebuild(src, MTIME, datetime(2026, 11, 6), RepairOptions())
     dest = tmp_path / f"{request.param}.jpg"
     dest.write_bytes(out)
     return src, dest

@@ -17,15 +17,17 @@ from charmfix import jpeg
 from charmfix.discovery import Candidate
 from charmfix.exif_read import read_exif
 from charmfix.pipeline import Job, RunOptions, process_file
+from charmfix.repair import RepairOptions
 
 PLANTED = datetime(2026, 7, 14, 18, 45, 12)
 
 pytestmark = pytest.mark.skipif(not REAL_SAMPLES, reason="no real samples in tests/samples")
 
 
-def run_one(src: Path, out_dir: Path, **opts: bool) -> tuple[object, Path]:
+def run_one(src: Path, out_dir: Path, *, assume_charmera: bool = True) -> tuple[object, Path]:
     dest = out_dir / src.name
-    result = process_file(Job(Candidate(src, Path(src.name)), dest), RunOptions(out_dir, **opts))
+    opts = RunOptions(out_dir, repair=RepairOptions(assume_charmera=assume_charmera))
+    result = process_file(Job(Candidate(src, Path(src.name)), dest), opts)
     return result, dest
 
 
