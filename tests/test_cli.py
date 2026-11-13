@@ -9,6 +9,7 @@ import sys
 import tempfile
 from collections.abc import Iterator
 from contextlib import contextmanager
+from dataclasses import fields
 from datetime import datetime
 from pathlib import Path
 
@@ -29,6 +30,7 @@ from helpers import (
 
 from charmfix import cli, jpeg, pipeline
 from charmfix.exif_read import read_exif
+from charmfix.repair import RepairOptions
 
 MTIME = datetime(2026, 4, 2, 8, 30, 0).timestamp()
 OVERLAP = "input and output folders must not overlap"
@@ -272,6 +274,12 @@ def test_report_options_are_flags_or_cleared_text() -> None:
     text = {k for k, v in options.items() if type(v) is not bool}
     assert options and text == REPORT_TEXT_OPTIONS
     assert all(type(options[k]) is str for k in text)
+
+
+def test_report_option_names_do_not_collide() -> None:
+    """report_options() merges two dataclasses; a shared name would drop one value silently."""
+    run = {f.name for f in fields(pipeline.RunOptions)}
+    assert not run & {f.name for f in fields(RepairOptions)}
 
 
 def test_single_file_input(tmp_path: Path) -> None:

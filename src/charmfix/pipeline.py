@@ -38,7 +38,8 @@ class RunOptions:
     preserve_structure: bool = True
     force: bool = False
     dry_run: bool = False
-    repair: RepairOptions = field(default_factory=RepairOptions)  # checked when built
+    # RepairOptions validates its target text when built: before any file is planned.
+    repair: RepairOptions = field(default_factory=RepairOptions)
 
     def report_options(self) -> dict[str, bool | str]:
         """The options for the JSON report, flat and without the output folder (a path)."""
