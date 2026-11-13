@@ -262,7 +262,11 @@ REPORT_TEXT_OPTIONS = {"make", "model"}
 
 
 def test_report_options_are_flags_or_cleared_text() -> None:
-    """A path (or any non-flag) field must never reach the report without a privacy decision."""
+    """A path (or any non-flag) field must never reach the report without a privacy decision.
+
+    New keys of any type also fail test_docs.py::test_report_keys_match_code until CLI.md lists
+    them; this test guards their type.
+    """
     options = pipeline.RunOptions(Path("/abs/out")).report_options()
     text = {k for k, v in options.items() if type(v) is not bool}
     assert options and text == REPORT_TEXT_OPTIONS
