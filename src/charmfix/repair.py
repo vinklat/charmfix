@@ -33,6 +33,7 @@ OFFSET_TIME_TAGS = (("Exif", 0x9010), ("Exif", 0x9011), ("Exif", 0x9012))
 
 DEFAULT_MAKE = "Kodak"
 DEFAULT_MODEL = "Charmera"
+MAX_CAMERA_TEXT = 64
 
 T_MAKE = ("0th", 0x010F)
 T_MODEL = ("0th", 0x0110)
@@ -157,12 +158,25 @@ def _mandatory(has_icc: bool) -> list[tuple[tuple[str, int], Any]]:
     ]
 
 
+def check_camera_text(value: str) -> str:
+    """A valid target Make or Model (REPAIRS.md, camera identity); otherwise ValueError."""
+    if not 1 <= len(value) <= MAX_CAMERA_TEXT:
+        raise ValueError(f"must be 1-{MAX_CAMERA_TEXT} characters")
+    if not (value.isascii() and value.isprintable()) or value != value.strip():
+        raise ValueError("must be printable ASCII without leading or trailing spaces")
+    return value
+
+
 @dataclass(frozen=True, kw_only=True)
 class RepairOptions:
     assume_charmera: bool = True
     now: datetime = field(default_factory=datetime.now)
     make: str = DEFAULT_MAKE
     model: str = DEFAULT_MODEL
+
+    def __post_init__(self) -> None:
+        check_camera_text(self.make)
+        check_camera_text(self.model)
 
 
 @dataclass(frozen=True)

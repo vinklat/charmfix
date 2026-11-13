@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import argparse
 import errno
 import hashlib
 import json
@@ -312,25 +311,9 @@ def test_custom_make_and_model(tmp_path: Path) -> None:
     assert (options["make"], options["model"]) == ("Acme", "Snap 1")
 
 
-@pytest.mark.parametrize("value", ["A", "Snap 1", "A" * cli.MAX_CAMERA_TEXT])
-def test_camera_text_accepted(value: str) -> None:
-    assert cli._camera_text(value) == value
-
-
-@pytest.mark.parametrize(
-    ("value", "message"),
-    [
-        pytest.param("", "1-64 characters", id="empty"),
-        pytest.param("A" * (cli.MAX_CAMERA_TEXT + 1), "1-64 characters", id="too-long"),
-        pytest.param(" Acme", "printable ASCII", id="leading-space"),
-        pytest.param("Acme ", "printable ASCII", id="trailing-space"),
-        pytest.param("Ačme", "printable ASCII", id="non-ascii"),
-        pytest.param("Ac\tme", "printable ASCII", id="control"),
-    ],
-)
-def test_camera_text_rejected(value: str, message: str) -> None:
-    with pytest.raises(argparse.ArgumentTypeError, match=message):
-        cli._camera_text(value)
+def test_run_options_reject_invalid_camera_text() -> None:
+    with pytest.raises(ValueError, match="printable ASCII"):
+        pipeline.RunOptions(Path("out"), model=" Acme")
 
 
 @pytest.mark.parametrize("option", ["--make", "--model"])

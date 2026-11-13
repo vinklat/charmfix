@@ -24,7 +24,7 @@ root is the file's folder.
 | `--report` | none | Write the [JSON report](#report) to this path. |
 | `--no-preserve-structure` | mirror folders | Put every output directly in the output folder. |
 | `--no-assume-charmera` | assume | Turn off `charmera(assumed)` → [REPAIRS.md](REPAIRS.md#camera-identity). |
-| `--make` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Make: 1–64 printable ASCII characters, no leading or trailing space. |
+| `--make` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Make; its text rules → [REPAIRS.md](REPAIRS.md#camera-identity). |
 | `--model` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Model; same rules as `--make`. |
 | `--version` | — | Print the version and exit. |
 

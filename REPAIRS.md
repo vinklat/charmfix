@@ -77,6 +77,9 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 
 | Target rule | Detail |
 | -- | -- |
+| Text | 1–64 printable ASCII characters, no leading or trailing space. |
+| Length | A charmfix limit, not an EXIF one (EXIF ASCII has none); real Make/Model values are far shorter. |
+| Invalid text | `RepairOptions` and `RunOptions` raise `ValueError`; on the command line → usage error ([CLI.md](CLI.md#exit-codes)). |
 | Comparison | Surrounding spaces and trailing NULs are ignored; a value equal to the target is kept as stored. |
 
 ## Defects

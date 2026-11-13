@@ -20,7 +20,14 @@ from .output import (
     check_inside,
     write_atomic,
 )
-from .repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, RepairPlan, plan_repair
+from .repair import (
+    DEFAULT_MAKE,
+    DEFAULT_MODEL,
+    RepairOptions,
+    RepairPlan,
+    check_camera_text,
+    plan_repair,
+)
 from .report import FileResult
 from .verify import VerificationError, verify_output
 
@@ -41,6 +48,11 @@ class RunOptions:
     assume_charmera: bool = True
     make: str = DEFAULT_MAKE
     model: str = DEFAULT_MODEL
+
+    def __post_init__(self) -> None:
+        # Fail once here rather than once per file when RepairOptions is built.
+        check_camera_text(self.make)
+        check_camera_text(self.model)
 
     def report_options(self) -> dict[str, bool | str]:
         """The options for the JSON report: everything but the output folder (no paths)."""

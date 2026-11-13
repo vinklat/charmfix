@@ -12,7 +12,7 @@ from typing import TextIO
 from . import __version__
 from .discovery import unreadable_reason
 from .pipeline import DiskFullError, Job, RunOptions, prepare, process_file
-from .repair import DEFAULT_MAKE, DEFAULT_MODEL
+from .repair import DEFAULT_MAKE, DEFAULT_MODEL, check_camera_text
 from .report import FileResult, Summary, build_report, write_report
 
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Kodak Charmera Repaired"
@@ -22,7 +22,6 @@ MACOS_PERMISSION_HINT = (
     "Removable Volumes (or Full Disk Access), then restart that app and try again."
 )
 EXIT_OK, EXIT_FAILURES, EXIT_FATAL, EXIT_INTERRUPTED = 0, 1, 2, 130
-MAX_CAMERA_TEXT = 64
 
 log = logging.getLogger("charmfix")
 
@@ -57,14 +56,11 @@ class _ProgressAwareHandler(logging.StreamHandler):  # type: ignore[type-arg]
 
 
 def _camera_text(value: str) -> str:
-    """A --make/--model value: 1-64 printable ASCII characters, no leading or trailing space."""
-    if not 1 <= len(value) <= MAX_CAMERA_TEXT:
-        raise argparse.ArgumentTypeError(f"must be 1-{MAX_CAMERA_TEXT} characters")
-    if not (value.isascii() and value.isprintable()) or value != value.strip():
-        raise argparse.ArgumentTypeError(
-            "must be printable ASCII without leading or trailing spaces"
-        )
-    return value
+    """argparse type for --make/--model: the repair rule, reported as a usage error."""
+    try:
+        return check_camera_text(value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(str(exc)) from exc
 
 
 def _parser() -> argparse.ArgumentParser:

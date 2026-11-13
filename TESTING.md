@@ -31,13 +31,13 @@ Tests assert the owning contract directly; its values are not copied here.
 | Dates (`test_dates.py`) | Accepted and rejected forms, normal form, sanity warnings → [REPAIRS.md](REPAIRS.md#rules). |
 | Repair rules (`test_repair.py`) | At least one case per rule → [REPAIRS.md](REPAIRS.md#rules). |
 | Repair identity and status (`test_repair.py`) | Each identity → [REPAIRS.md](REPAIRS.md#camera-identity); each status → [REPAIRS.md](REPAIRS.md#status). |
+| Repair target text (`test_repair.py`) | Accepted boundaries and each rejected kind → [REPAIRS.md](REPAIRS.md#camera-identity); `RunOptions` rejects them too. |
 | Repair round trip (`test_repair.py`) | Every case runs plan → write → splice → verify, re-reads the output, and a second run gives `already_valid`. |
 | Output validity (`test_external.py`) | Per generated fixture: identical pixels and image-data hash, `exiftool -validate` OK, `sips` size and date. |
 | Atomic writes (`test_output.py`) | Every row except disk full → [CLI.md](CLI.md#output-files). |
 | CLI batch (`test_cli.py`) | A corrupt file fails only that file; source hashes and mtimes are unchanged. |
 | CLI re-run (`test_cli.py`) | Second run → only `exists` skips; run on the output → all `already_valid`. |
 | CLI modes (`test_cli.py`) | Dry run writes nothing; flatten; no recursion; single-file input; `--force`; `--make`/`--model`, and a rejected value with its message. |
-| CLI values (`test_cli.py`) | `--make`/`--model` text: accepted boundaries and each rejected kind → [CLI.md](CLI.md#options). |
 | CLI refusals (`test_cli.py`) | Every refusal, also with a path in another letter case and with a failing identity check; its own message is printed; nothing is written → [CLI.md](CLI.md#source-safety). |
 | CLI write safety (`test_cli.py`, `test_output.py`) | Symlinked output folder, with and without `--force` → [CLI.md](CLI.md#output-files); hard-linked or unwritable report → [CLI.md](CLI.md#report); every source unchanged. |
 | CLI single file (`test_cli.py`) | Output or report near the file but not refused → the run succeeds and the source is unchanged. |
