@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
 
@@ -275,20 +276,46 @@ def test_custom_target_with_no_assume_charmera(base_jpeg: bytes) -> None:
     assert r.tag("0th", 0x010F) is None
 
 
+def as_is(data: bytes) -> bytes:
+    return data
+
+
 @pytest.mark.parametrize(
-    ("gpencoder", "identity", "warned"),
-    [(False, "unknown", False), (True, "charmera(assumed)", True)],
-    ids=["no-gpencoder", "gpencoder"],
+    ("layout", "model", "identity", "changes", "warned"),
+    [
+        pytest.param(as_is, "Snap 1", "unknown", [], False, id="other-target"),
+        pytest.param(charmera_layout, "Snap 1", "charmera(assumed)", [], True, id="gpencoder"),
+        pytest.param(
+            as_is,
+            DEFAULT_MODEL,
+            "charmera(exif)",
+            ["0th.Make: Acme -> Kodak"],
+            False,
+            id="charmera",
+        ),
+        pytest.param(
+            charmera_layout,
+            DEFAULT_MODEL,
+            "charmera(exif)",
+            ["0th.Make: Acme -> Kodak"],
+            False,
+            id="charmera-gpencoder",
+        ),
+    ],
 )
 def test_custom_target_output_on_a_later_default_run(
-    base_jpeg: bytes, gpencoder: bool, identity: str, warned: bool
+    base_jpeg: bytes,
+    layout: Callable[[bytes], bytes],
+    model: str,
+    identity: str,
+    changes: list[str],
+    warned: bool,
 ) -> None:
-    src = with_exif(base_jpeg, valid_tiff())
-    r = repair(charmera_layout(src) if gpencoder else src, make="Acme", model="Snap 1")
+    r = repair(layout(with_exif(base_jpeg, valid_tiff())), make="Acme", model=model)
     jf = jpeg.parse(r.out)
     later = plan_repair(jf, read_exif(jf.exif_tiff() or b""), MTIME, RepairOptions(now=NOW))
     assert later.identity == identity
-    assert later.status_hint == "already_valid"  # the custom Make/Model is kept
+    assert [str(c) for c in later.changes] == changes  # kept, or set back to the default
     assert any("kept" in w for w in later.warnings) == warned
 
 
