@@ -346,8 +346,8 @@ def test_valid_file_is_rebuilt_only_for_another_target(
 
 @pytest.mark.parametrize(
     ("make", "model"),
-    [("Acme", "Other"), ("Other", "Snap 1"), ("Other", "Cam")],
-    ids=["make-matches", "model-matches", "neither-matches"],
+    [("Acme", "Other"), ("Other", "Snap 1"), ("Other", "Cam"), ("Acme", ""), ("", "Snap 1")],
+    ids=["make-matches", "model-matches", "neither-matches", "model-empty", "make-empty"],
 )
 def test_assumed_file_not_at_target_is_kept_with_warning(
     base_jpeg: bytes, make: str, model: str
