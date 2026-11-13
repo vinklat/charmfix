@@ -343,14 +343,23 @@ def test_assumed_file_not_at_target_is_kept_with_warning(
 
 
 @pytest.mark.parametrize(
-    ("layout", "model", "identity", "changes", "warned"),
+    ("layout", "model", "identity", "status", "changes", "warned"),
     [
-        pytest.param(as_is, "Snap 1", "unknown", [], False, id="other-target"),
-        pytest.param(charmera_layout, "Snap 1", "charmera(assumed)", [], True, id="gpencoder"),
+        pytest.param(as_is, "Snap 1", "unknown", "already_valid", [], False, id="other-target"),
+        pytest.param(
+            charmera_layout,
+            "Snap 1",
+            "charmera(assumed)",
+            "already_valid",
+            [],
+            True,
+            id="gpencoder",
+        ),
         pytest.param(
             as_is,
             DEFAULT_MODEL,
             "charmera(exif)",
+            "repaired",
             ["0th.Make: Acme -> Kodak"],
             False,
             id="charmera",
@@ -359,6 +368,7 @@ def test_assumed_file_not_at_target_is_kept_with_warning(
             charmera_layout,
             DEFAULT_MODEL,
             "charmera(exif)",
+            "repaired",
             ["0th.Make: Acme -> Kodak"],
             False,
             id="charmera-gpencoder",
@@ -370,13 +380,14 @@ def test_custom_target_output_on_a_later_default_run(
     layout: Callable[[bytes], bytes],
     model: str,
     identity: str,
+    status: str,
     changes: list[str],
     warned: bool,
 ) -> None:
     r = repair(layout(with_exif(base_jpeg, valid_tiff())), make="Acme", model=model)
     jf = jpeg.parse(r.out)
     later = plan_repair(jf, read_exif(jf.exif_tiff() or b""), MTIME, NOW)
-    assert later.identity == identity
+    assert (later.identity, later.status_hint) == (identity, status)
     assert [str(c) for c in later.changes] == changes  # kept, or set back to the default
     assert any("kept" in w for w in later.warnings) == warned
 

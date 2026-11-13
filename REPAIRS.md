@@ -82,8 +82,7 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 | Invalid text | Rejected, naming the field, when the target is set, before any file is planned with it; on the command line → usage error ([CLI.md](CLI.md#exit-codes)). |
 | Comparison | Surrounding spaces and trailing NULs are ignored; a value equal to the target is kept as stored. |
 | Other target, valid file | A `charmera(exif)` Make/Model that differs is a [defect](#defects): the file is rebuilt, so rules 4 and 5 drop its MakerNote and unknown tags. |
-| Later run, other target | Identity follows the table above. A written Make/Model containing "charmera" (e.g. `--make` alone keeps Model `Charmera`) makes the output `charmera(exif)`: set to the new target. |
-| Later run, no "charmera" | An output with the `GPEncoder` comment is `charmera(assumed)`: its Make/Model is kept with a warning and it stays `already_valid`. Without the comment it is `unknown`. |
+| Later run | Identity is read from the file, never from an earlier run. Only an output whose Make/Model contains "charmera" (e.g. `--make` alone keeps Model `Charmera`) gets a new target; any other stays `already_valid` under the table above. To re-target, run on the originals. |
 
 ## Defects
 
