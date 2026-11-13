@@ -257,7 +257,7 @@ def test_flatten_and_no_recursion(card: Path, tmp_path: Path) -> None:
     assert not out2.exists()  # no JPEGs directly in DCIM
 
 
-# Non-flag options cleared for the report by CLI.md's privacy rules (Make and Model are allowed).
+# Non-flag options cleared for the report → CLI.md#report (privacy rules).
 REPORT_TEXT_OPTIONS = {"make", "model"}
 
 
