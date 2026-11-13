@@ -104,14 +104,14 @@ def _parser() -> argparse.ArgumentParser:
         type=_camera_text,
         default=DEFAULT_MAKE,
         metavar="TEXT",
-        help=f"camera Make to write (default: {DEFAULT_MAKE})",
+        help=f"camera Make written to Charmera files (default: {DEFAULT_MAKE})",
     )
     p.add_argument(
         "--model",
         type=_camera_text,
         default=DEFAULT_MODEL,
         metavar="TEXT",
-        help=f"camera Model to write (default: {DEFAULT_MODEL})",
+        help=f"camera Model written to Charmera files (default: {DEFAULT_MODEL})",
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     return p
