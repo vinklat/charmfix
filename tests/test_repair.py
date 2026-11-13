@@ -310,7 +310,7 @@ NOT_WRITTEN = (None, None)
         pytest.param(as_is, True, ACME, NOT_WRITTEN, "unknown", id="unknown-custom"),
     ],
 )
-def test_identity_gets_the_target(
+def test_target_is_written_only_for_charmera_identities(
     base_jpeg: bytes,
     layout: Callable[[bytes], bytes],
     assume: bool,
@@ -333,7 +333,7 @@ def test_identity_gets_the_target(
     ],
     ids=["default-target", "other-target"],
 )
-def test_other_target_rebuilds_a_valid_file(
+def test_valid_file_is_rebuilt_only_for_another_target(
     base_jpeg: bytes, make: str, status: str, makernote: str, unknown_kept: bool
 ) -> None:
     exif = [*standard_exif_entries(), long_(0xA002, 64), long_(0xA003, 48)]
