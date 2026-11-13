@@ -92,6 +92,11 @@ def as_is(data: bytes) -> bytes:
     return data
 
 
+def kodak_exif(data: bytes) -> bytes:
+    """A layout with valid Kodak/Charmera EXIF and no GPEncoder comment."""
+    return with_exif(data, valid_tiff())
+
+
 # 1
 def test_no_exif_charmera_file(base_jpeg: bytes) -> None:
     r = repair(charmera_layout(base_jpeg))
@@ -249,30 +254,58 @@ def test_gpencoder_with_other_make_is_kept_with_warning(base_jpeg: bytes) -> Non
     assert any("Acme" in w for w in r.plan.warnings)
 
 
-def test_no_assume_charmera(base_jpeg: bytes) -> None:
-    r = repair(charmera_layout(base_jpeg), assume_charmera=False)
-    assert r.plan.identity == "generalplus-unconfirmed"
-    assert r.tag("0th", 0x010F) is None
+NOT_WRITTEN = (None, None)
 
 
-def test_unknown_camera(base_jpeg: bytes) -> None:
-    r = repair(base_jpeg)
-    assert r.plan.identity == "unknown"
-    assert r.tag("0th", 0x010F) is None
-
-
-def test_custom_target_on_assumed_file(base_jpeg: bytes) -> None:
-    r = repair(charmera_layout(base_jpeg), make="Acme", model="Snap 1")
-    assert r.plan.identity == "charmera(assumed)"
-    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == ("Acme", "Snap 1")
+@pytest.mark.parametrize(
+    ("layout", "assume", "target", "written", "identity"),
+    [
+        pytest.param(charmera_layout, True, ACME, ACME, "charmera(assumed)", id="assumed"),
+        pytest.param(
+            charmera_layout,
+            True,
+            ("Acme", DEFAULT_MODEL),
+            ("Acme", DEFAULT_MODEL),
+            "charmera(assumed)",
+            id="assumed-make-only",
+        ),
+        pytest.param(
+            charmera_layout,
+            True,
+            (DEFAULT_MAKE, "Snap 1"),
+            (DEFAULT_MAKE, "Snap 1"),
+            "charmera(assumed)",
+            id="assumed-model-only",
+        ),
+        pytest.param(kodak_exif, True, ACME, ACME, "charmera(exif)", id="exif"),
+        pytest.param(
+            charmera_layout, False, KODAK, NOT_WRITTEN, "generalplus-unconfirmed", id="unconfirmed"
+        ),
+        pytest.param(
+            charmera_layout,
+            False,
+            ACME,
+            NOT_WRITTEN,
+            "generalplus-unconfirmed",
+            id="unconfirmed-custom",
+        ),
+        pytest.param(as_is, True, KODAK, NOT_WRITTEN, "unknown", id="unknown"),
+        pytest.param(as_is, True, ACME, NOT_WRITTEN, "unknown", id="unknown-custom"),
+    ],
+)
+def test_identity_gets_the_target(
+    base_jpeg: bytes,
+    layout: Callable[[bytes], bytes],
+    assume: bool,
+    target: tuple[str, str],
+    written: tuple[str | None, str | None],
+    identity: str,
+) -> None:
+    """A charmera identity gets the target Make/Model; the others are left without one."""
+    r = repair(layout(base_jpeg), assume_charmera=assume, make=target[0], model=target[1])
+    assert r.plan.identity == identity
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == written
     assert not r.plan.warnings
-
-
-def test_custom_target_rewrites_charmera_exif(base_jpeg: bytes) -> None:
-    r = repair(with_exif(base_jpeg, valid_tiff()), make="Acme", model="Snap 1")
-    assert r.plan.identity == "charmera(exif)"
-    assert r.plan.status_hint == "repaired"
-    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == ("Acme", "Snap 1")
 
 
 @pytest.mark.parametrize(
@@ -296,16 +329,6 @@ def test_other_target_rebuilds_a_valid_file(
 
 @pytest.mark.parametrize(
     ("make", "model"),
-    [("Acme", DEFAULT_MODEL), (DEFAULT_MAKE, "Snap 1")],
-    ids=["make-only", "model-only"],
-)
-def test_custom_target_parts_are_independent(base_jpeg: bytes, make: str, model: str) -> None:
-    r = repair(charmera_layout(base_jpeg), make=make, model=model)
-    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == (make, model)
-
-
-@pytest.mark.parametrize(
-    ("make", "model"),
     [("Acme", "Other"), ("Other", "Snap 1"), ("Other", "Cam")],
     ids=["make-matches", "model-matches", "neither-matches"],
 )
@@ -317,12 +340,6 @@ def test_assumed_file_not_at_target_is_kept_with_warning(
     assert r.plan.identity == "charmera(assumed)"
     assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == (make, model)
     assert any(f"{make!r}/{model!r}; kept" in w for w in r.plan.warnings)
-
-
-def test_custom_target_with_no_assume_charmera(base_jpeg: bytes) -> None:
-    r = repair(charmera_layout(base_jpeg), assume_charmera=False, make="Acme")
-    assert r.plan.identity == "generalplus-unconfirmed"
-    assert r.tag("0th", 0x010F) is None
 
 
 @pytest.mark.parametrize(
@@ -397,12 +414,6 @@ def test_camera_text_rejected(value: str, message: str) -> None:
         RepairOptions(make=value)
     with pytest.raises(ValueError, match=f"^model must be .*{message}"):
         RepairOptions(model=value)
-
-
-def test_custom_target_leaves_unknown_camera(base_jpeg: bytes) -> None:
-    r = repair(base_jpeg, make="Acme", model="Snap 1")
-    assert r.plan.identity == "unknown"
-    assert r.tag("0th", 0x010F) is None
 
 
 # 12
