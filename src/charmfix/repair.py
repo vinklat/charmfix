@@ -513,7 +513,9 @@ def _apply_identity(plan: RepairPlan, jf: JpegFile, opts: RepairOptions) -> None
         plan.identity = "charmera(assumed)"
         if not stored_make and not stored_model:
             set_identity()
-        elif (stored_make, stored_model) != (opts.make, opts.model):  # both: kept, warned
+        elif (stored_make, stored_model) == (opts.make, opts.model):
+            pass  # already at the target: kept as stored, no warning
+        else:
             plan.warnings.append(
                 f"GPEncoder file has Make/Model {stored_make!r}/{stored_model!r}; kept"
             )
