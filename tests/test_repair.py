@@ -245,6 +245,23 @@ def test_value_equal_to_target_is_kept_as_stored(
     assert not r.plan.warnings
 
 
+@pytest.mark.parametrize(
+    ("layout", "target"),
+    [pytest.param(as_is, KODAK, id="exif"), pytest.param(charmera_layout, ACME, id="assumed")],
+)
+def test_trailing_nuls_are_not_a_difference(
+    base_jpeg: bytes, layout: Callable[[bytes], bytes], target: tuple[str, str]
+) -> None:
+    """NUL padding is normalised on output, so only the absence of a change shows it was kept."""
+    stored = (f"{target[0]}\x00\x00", f"{target[1]}\x00")  # on top of the terminating NUL
+    src = layout(with_exif(base_jpeg, valid_tiff(640, make=stored[0], model=stored[1])))
+    r = repair(src, make=target[0], model=target[1])
+    assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == target
+    assert not [c for c in r.plan.changes if c.field in ("0th.Make", "0th.Model")]
+    assert not [d for d in r.plan.defects if "Make" in d or "Model" in d]
+    assert not r.plan.warnings
+
+
 # 11
 def test_gpencoder_with_other_make_is_kept_with_warning(base_jpeg: bytes) -> None:
     src = charmera_layout(with_exif(base_jpeg, valid_tiff(make="Acme", model="Cam")))
