@@ -12,7 +12,7 @@ from typing import TextIO
 from . import __version__
 from .discovery import unreadable_reason
 from .pipeline import DiskFullError, Job, RunOptions, prepare, process_file
-from .repair import DEFAULT_MAKE, DEFAULT_MODEL, check_camera_text
+from .repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, check_camera_text
 from .report import FileResult, Summary, build_report, write_report
 
 DEFAULT_OUTPUT = Path.home() / "Pictures" / "Kodak Charmera Repaired"
@@ -205,9 +205,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         preserve_structure=args.preserve_structure,
         force=args.force,
         dry_run=args.dry_run,
-        assume_charmera=args.assume_charmera,
-        make=args.make,
-        model=args.model,
+        repair=RepairOptions(
+            assume_charmera=args.assume_charmera, make=args.make, model=args.model
+        ),
     )
     input_root = input_path if is_folder else input_path.parent
     reason = unreadable_reason(input_root)

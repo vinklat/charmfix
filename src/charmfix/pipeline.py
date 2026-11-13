@@ -5,7 +5,7 @@ from __future__ import annotations
 import errno
 import logging
 import os
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field, replace
 from datetime import datetime
 from pathlib import Path
 
@@ -20,14 +20,7 @@ from .output import (
     check_inside,
     write_atomic,
 )
-from .repair import (
-    DEFAULT_MAKE,
-    DEFAULT_MODEL,
-    RepairOptions,
-    RepairPlan,
-    check_camera_text,
-    plan_repair,
-)
+from .repair import RepairOptions, RepairPlan, plan_repair
 from .report import FileResult
 from .verify import VerificationError, verify_output
 
@@ -45,18 +38,13 @@ class RunOptions:
     preserve_structure: bool = True
     force: bool = False
     dry_run: bool = False
-    assume_charmera: bool = True
-    make: str = DEFAULT_MAKE
-    model: str = DEFAULT_MODEL
-
-    def __post_init__(self) -> None:
-        # Fail once here rather than once per file when RepairOptions is built.
-        check_camera_text(self.make)
-        check_camera_text(self.model)
+    # Checked when built, before any file; each file gets a copy with its own clock (_process).
+    repair: RepairOptions = field(default_factory=RepairOptions)
 
     def report_options(self) -> dict[str, bool | str]:
-        """The options for the JSON report: everything but the output folder (no paths)."""
-        return {k: v for k, v in asdict(self).items() if k != "output_root"}
+        """The options for the JSON report, flat: no output folder (a path) and no clock."""
+        run = {k: v for k, v in asdict(self).items() if k not in ("output_root", "repair")}
+        return run | {k: v for k, v in asdict(self.repair).items() if k != "now"}
 
 
 @dataclass(frozen=True)
@@ -140,10 +128,7 @@ def _process(job: Job, opts: RunOptions, result: FileResult, now: datetime) -> N
         st = os.fstat(f.fileno())
         data = f.read()
 
-    repair_opts = RepairOptions(
-        assume_charmera=opts.assume_charmera, now=now, make=opts.make, model=opts.model
-    )
-    jf, plan, out = rebuild(data, st.st_mtime, repair_opts)
+    jf, plan, out = rebuild(data, st.st_mtime, replace(opts.repair, now=now))
     result.sof_size = (jf.width, jf.height)
     result.image_sha256 = jpeg.image_digest(jf)
     result.old_sizes = plan.old_sizes

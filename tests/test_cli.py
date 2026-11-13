@@ -311,11 +311,6 @@ def test_custom_make_and_model(tmp_path: Path) -> None:
     assert (options["make"], options["model"]) == ("Acme", "Snap 1")
 
 
-def test_run_options_reject_invalid_camera_text() -> None:
-    with pytest.raises(ValueError, match="printable ASCII"):
-        pipeline.RunOptions(Path("out"), model=" Acme")
-
-
 @pytest.mark.parametrize("option", ["--make", "--model"])
 def test_camera_option_rejection_is_a_usage_error(
     tmp_path: Path, option: str, capsys: pytest.CaptureFixture[str]
