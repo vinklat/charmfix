@@ -93,7 +93,7 @@ def as_is(data: bytes) -> bytes:
 
 
 def kodak_exif(data: bytes) -> bytes:
-    """A layout with valid Kodak/Charmera EXIF and no GPEncoder comment."""
+    """Adds valid Kodak/Charmera EXIF, unlike the pure layouts; no GPEncoder comment."""
     return with_exif(data, valid_tiff())
 
 
@@ -191,6 +191,7 @@ def test_charmera_in_exif_is_normalized(base_jpeg: bytes) -> None:
     assert (r.tag("0th", 0x010F), r.tag("0th", 0x0110)) == ("Kodak", "Charmera")
 
 
+# Target Make/Model → REPAIRS.md#camera-identity
 KODAK = (DEFAULT_MAKE, DEFAULT_MODEL)
 ACME = ("Acme", "Snap 1")
 
@@ -417,6 +418,7 @@ def test_assumed_file_already_at_target_is_valid_without_warning(base_jpeg: byte
     assert not r.plan.warnings
 
 
+# Target text rule → REPAIRS.md#camera-identity
 @pytest.mark.parametrize("value", ["A", "Snap 1", "~", "A" * MAX_TARGET_LENGTH])
 def test_target_text_accepted(value: str) -> None:
     assert check_target_text(value) == value
