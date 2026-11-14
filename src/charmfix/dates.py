@@ -42,6 +42,7 @@ def is_normal_form(raw: bytes | str | None) -> bool:
 def format_exif(dt: datetime) -> str:
     """``YYYY:MM:DD HH:MM:SS``, the year always four digits."""
     # The year by hand: glibc's %Y does not pad years below 1000 before Python 3.14.
+    # OutputNames.assign pads the output-name prefix the same way.
     return f"{dt.year:04d}:{dt:%m:%d %H:%M:%S}"
 
 

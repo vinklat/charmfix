@@ -46,7 +46,7 @@ class OutputNames:
         """Claim the output path for the input-relative ``rel``, captured at ``capture_time``."""
         target = self.root / (rel if self.preserve_structure else Path(rel.name))
         if self.date_prefix:
-            # The year by hand: glibc's %Y does not pad years below 1000 before Python 3.14.
+            # The year by hand, as in dates.format_exif (glibc %Y, Python < 3.14).
             prefix = f"{capture_time.year:04d}{capture_time:%m%d-%H%M%S}_"
             if not target.name.startswith(prefix):  # a charmfix output keeps its name
                 target = target.with_name(prefix + target.name)
