@@ -49,11 +49,12 @@ class RunOptions:
 
     def output_names(self) -> OutputNames:
         """A fresh name register for one run."""
-        return OutputNames(
-            self.output_root,
-            preserve_structure=self.preserve_structure,
-            date_prefix=self.date_prefix,
-        )
+        return OutputNames(self.output_root, preserve_structure=self.preserve_structure)
+
+
+def name_prefix(date_written: str) -> str:
+    """The output-name prefix for an EXIF date: ``YYYY:MM:DD HH:MM:SS`` → ``YYYYMMDD-HHMMSS_``."""
+    return date_written.replace(":", "").replace(" ", "-") + "_"
 
 
 def _error_text(exc: BaseException) -> str:
@@ -85,21 +86,13 @@ def build(jf: jpeg.JpegFile, plan: RepairPlan, data: bytes) -> bytes:
     return out
 
 
-def rebuild(
-    data: bytes, src_mtime: float, now: datetime, options: RepairOptions
-) -> tuple[jpeg.JpegFile, RepairPlan, bytes]:
-    """``analyse`` then ``build``: one file in memory, start to end."""
-    jf, plan = analyse(data, src_mtime, now, options)
-    return jf, plan, build(jf, plan, data)
-
-
 def process_file(
     cand: Candidate, opts: RunOptions, names: OutputNames, now: datetime | None = None
 ) -> FileResult:
     """Process one candidate; its output name is claimed from ``names`` once it is analysed.
 
     ``names`` is the run's single register (``opts.output_names()``), shared by every call:
-    it keeps output names unique within the run, and its root is where files are written.
+    it keeps output names unique within the run.
     """
     result = FileResult(rel_path=cand.rel.as_posix(), status="failed")
     if cand.skip_reason:
@@ -133,10 +126,13 @@ def _process(
         data = f.read()
 
     jf, plan = analyse(data, st.st_mtime, now, opts.repair)
-    assert plan.capture_time is not None  # rule 1 always sets it, falling back to the mtime
-    dest = names.assign(cand.rel, plan.capture_time)
-    result.output = dest.relative_to(names.root).as_posix()
-    check_inside(dest, names.root)  # before the `exists` check, which follows symlinks
+    prefix = ""
+    if opts.date_prefix:
+        assert plan.date_written is not None  # rule 1 always sets it, falling back to the mtime
+        prefix = name_prefix(plan.date_written)
+    dest = names.assign(cand.rel, prefix)
+    result.output = dest.relative_to(opts.output_root).as_posix()
+    check_inside(dest, opts.output_root)  # before the `exists` check, which follows symlinks
     if not opts.force and dest.exists():
         result.status, result.reason = "skipped", "exists"
         return
@@ -160,7 +156,7 @@ def _process(
         result.warnings += write_atomic(
             dest,
             out,
-            root=names.root,
+            root=opts.output_root,
             force=opts.force,
             times_ns=(st.st_atime_ns, st.st_mtime_ns),
         )

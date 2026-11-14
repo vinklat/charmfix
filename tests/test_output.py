@@ -8,7 +8,9 @@ from pathlib import Path
 
 import pytest
 
+from charmfix.dates import format_exif
 from charmfix.output import OutputExistsError, OutputNames, OutsideOutputError, write_atomic
+from charmfix.pipeline import name_prefix
 
 TIMES = (1_700_000_000_000_000_000, 1_600_000_000_123_456_789)
 
@@ -17,25 +19,24 @@ def tmp_files(folder: Path) -> list[Path]:
     return list(folder.glob(".charmfix-*.tmp"))
 
 
-TAKEN = datetime(2026, 4, 2, 8, 30, 5)
 PREFIX = "20260402-083005_"
 
 
-def names(root: Path, *, preserve_structure: bool = True, date_prefix: bool = True) -> OutputNames:
-    return OutputNames(root, preserve_structure=preserve_structure, date_prefix=date_prefix)
+def names(root: Path, *, preserve_structure: bool = True) -> OutputNames:
+    return OutputNames(root, preserve_structure=preserve_structure)
 
 
 def test_assign_mirrors_structure(tmp_path: Path) -> None:
-    n = names(tmp_path, date_prefix=False)
-    assert [n.assign(Path(r), TAKEN) for r in ("a/x.jpg", "b/x.jpg")] == [
+    n = names(tmp_path)
+    assert [n.assign(Path(r)) for r in ("a/x.jpg", "b/x.jpg")] == [
         tmp_path / "a/x.jpg",
         tmp_path / "b/x.jpg",
     ]
 
 
 def test_assign_flatten_dedupes(tmp_path: Path) -> None:
-    n = names(tmp_path, preserve_structure=False, date_prefix=False)
-    assert [n.assign(Path(r), TAKEN) for r in ("a/x.jpg", "b/x.jpg", "c/X.JPG")] == [
+    n = names(tmp_path, preserve_structure=False)
+    assert [n.assign(Path(r)) for r in ("a/x.jpg", "b/x.jpg", "c/X.JPG")] == [
         tmp_path / "x.jpg",
         tmp_path / "x_1.jpg",
         tmp_path / "X_2.JPG",
@@ -44,46 +45,50 @@ def test_assign_flatten_dedupes(tmp_path: Path) -> None:
 
 def test_assign_ignores_existing_files(tmp_path: Path) -> None:
     (tmp_path / "x.jpg").write_bytes(b"old")
-    assert names(tmp_path, date_prefix=False).assign(Path("x.jpg"), TAKEN) == tmp_path / "x.jpg"
+    assert names(tmp_path).assign(Path("x.jpg")) == tmp_path / "x.jpg"
 
 
 @pytest.mark.parametrize("preserve_structure", [True, False], ids=["mirror", "flatten"])
 def test_assign_prefixes_the_capture_time(tmp_path: Path, preserve_structure: bool) -> None:
-    dest = names(tmp_path, preserve_structure=preserve_structure).assign(Path("a/x.jpg"), TAKEN)
+    dest = names(tmp_path, preserve_structure=preserve_structure).assign(Path("a/x.jpg"), PREFIX)
     folder = tmp_path / "a" if preserve_structure else tmp_path
     assert dest == folder / f"{PREFIX}x.jpg"
 
 
 def test_assign_same_name_other_time_does_not_clash(tmp_path: Path) -> None:
     n = names(tmp_path, preserve_structure=False)
-    later = datetime(2026, 5, 1, 9, 0, 0)
-    assert [n.assign(Path("a/x.jpg"), TAKEN), n.assign(Path("b/x.jpg"), later)] == [
+    later = "20260501-090000_"
+    assert [n.assign(Path("a/x.jpg"), PREFIX), n.assign(Path("b/x.jpg"), later)] == [
         tmp_path / f"{PREFIX}x.jpg",
-        tmp_path / "20260501-090000_x.jpg",
+        tmp_path / f"{later}x.jpg",
     ]
 
 
 def test_assign_same_name_same_time_dedupes(tmp_path: Path) -> None:
     n = names(tmp_path, preserve_structure=False)
-    assert [n.assign(Path(r), TAKEN) for r in ("a/x.jpg", "b/X.JPG")] == [
+    assert [n.assign(Path(r), PREFIX) for r in ("a/x.jpg", "b/X.JPG")] == [
         tmp_path / f"{PREFIX}x.jpg",
         tmp_path / f"{PREFIX}X_1.JPG",
     ]
 
 
 def test_assign_keeps_an_existing_prefix(tmp_path: Path) -> None:
-    dest = names(tmp_path).assign(Path(f"{PREFIX}x.jpg"), TAKEN)
+    dest = names(tmp_path).assign(Path(f"{PREFIX}x.jpg"), PREFIX)
     assert dest == tmp_path / f"{PREFIX}x.jpg"
 
 
-def test_assign_pads_the_year(tmp_path: Path) -> None:
-    dest = names(tmp_path).assign(Path("x.jpg"), datetime(5, 1, 1))
-    assert dest == tmp_path / "00050101-000000_x.jpg"  # glibc's %Y would give 50101-…
-
-
 def test_assign_prefixes_a_name_with_another_time(tmp_path: Path) -> None:
-    dest = names(tmp_path).assign(Path("20000101-000000_x.jpg"), TAKEN)
+    dest = names(tmp_path).assign(Path("20000101-000000_x.jpg"), PREFIX)
     assert dest == tmp_path / f"{PREFIX}20000101-000000_x.jpg"
+
+
+@pytest.mark.parametrize(
+    ("taken", "prefix"),
+    [(datetime(2026, 4, 2, 8, 30, 5), PREFIX), (datetime(5, 1, 1), "00050101-000000_")],
+    ids=["date", "short-year"],  # glibc's %Y would give 50101-…
+)
+def test_name_prefix_is_the_written_date(taken: datetime, prefix: str) -> None:
+    assert name_prefix(format_exif(taken)) == prefix
 
 
 def test_write_creates_file_with_times(tmp_path: Path) -> None:

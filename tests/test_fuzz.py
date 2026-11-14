@@ -18,7 +18,7 @@ from hypothesis import strategies as st
 from charmfix import jpeg
 from charmfix.exif_read import read_exif
 from charmfix.exif_write import ExifTooLargeError
-from charmfix.pipeline import rebuild
+from charmfix.pipeline import analyse, build
 from charmfix.repair import RepairOptions
 from charmfix.verify import VerificationError
 
@@ -48,9 +48,10 @@ def damaged(draw: st.DrawFn, seeds: list[bytes]) -> bytes:
 
 @settings(max_examples=400, deadline=1000, suppress_health_check=[HealthCheck.too_slow])
 @given(damaged(SEEDS))
-def test_rebuild_never_crashes(data: bytes) -> None:
+def test_analyse_and_build_never_crash(data: bytes) -> None:
     try:
-        _, _, out = rebuild(data, 1_700_000_000, NOW, RepairOptions())
+        jf, plan = analyse(data, 1_700_000_000, NOW, RepairOptions())
+        out = build(jf, plan, data)
     except EXPECTED:
         return
     # Whatever succeeded must have kept the image data.

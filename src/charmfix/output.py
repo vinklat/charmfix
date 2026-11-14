@@ -6,7 +6,6 @@ import contextlib
 import errno
 import os
 import tempfile
-from datetime import datetime
 from pathlib import Path
 
 # Errors meaning "this filesystem cannot hard-link" (FAT/exFAT, SMB, ...).
@@ -38,18 +37,15 @@ class OutputNames:
     Existing files on disk are *not* considered here: those are skipped later.
     """
 
-    def __init__(self, root: Path, *, preserve_structure: bool, date_prefix: bool) -> None:
-        self.root, self.preserve_structure, self.date_prefix = root, preserve_structure, date_prefix
+    def __init__(self, root: Path, *, preserve_structure: bool) -> None:
+        self._root, self._preserve_structure = root, preserve_structure
         self._claimed: set[str] = set()
 
-    def assign(self, rel: Path, capture_time: datetime) -> Path:
-        """Claim the output path for the input-relative ``rel``, captured at ``capture_time``."""
-        target = self.root / (rel if self.preserve_structure else Path(rel.name))
-        if self.date_prefix:
-            # The year by hand, as in dates.format_exif (glibc %Y, Python < 3.14).
-            prefix = f"{capture_time.year:04d}{capture_time:%m%d-%H%M%S}_"
-            if not target.name.startswith(prefix):  # a charmfix output keeps its name
-                target = target.with_name(prefix + target.name)
+    def assign(self, rel: Path, prefix: str = "") -> Path:
+        """Claim the output path for the input-relative ``rel``, its name led by ``prefix``."""
+        target = self._root / (rel if self._preserve_structure else Path(rel.name))
+        if not target.name.startswith(prefix):  # a charmfix output keeps its name
+            target = target.with_name(prefix + target.name)
         candidate, n = target, 0
         while str(candidate).casefold() in self._claimed:
             n += 1
