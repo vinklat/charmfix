@@ -63,9 +63,12 @@ Files are visited in sorted order. Symlinked folders inside the input are not fo
 | Date prefix | The file name starts with the capture time → [REPAIRS.md](REPAIRS.md#rules) (rule 1) as `YYYYMMDD-HHMMSS_`. |
 | Prefixed source | A name that already starts with exactly that prefix is kept, so a run on the output keeps its names. |
 | Stale prefix | A name that starts with another time is prefixed again, so it never shows a date its EXIF no longer has. |
-| Naming time | A file is named after it is analysed; one that is skipped or fails before that has no `output`. |
+| Naming time | A file is named after it is analysed. |
+| Unnamed file | A file skipped or failed before it is named has no `output` → [report](#report). |
 | Name clashes in one run | Compared case-insensitively; later files get `_1`, `_2`, … before the extension. |
-| Existing output | `skipped` (`exists`) and left untouched, before the output is built. `--force` replaces it. |
+| Existing output | `skipped` (`exists`) and left untouched. |
+| Existing-output check | Runs before the output is built. |
+| Existing output with `--force` | Replaced. |
 | Re-run | Over the same sources, a file named in both runs gets the same name again, unless a row below changes it. |
 | Changed modification time | A file named from its modification time → [REPAIRS.md](REPAIRS.md#rules) (rule 1a) gets another name once that time changes. |
 | Changed time zone | Such a file also gets another name once the computer's time zone changes. |

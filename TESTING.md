@@ -38,7 +38,7 @@ Tests assert the owning contract directly; its values are not copied here.
 | Atomic writes (`test_output.py`) | Every row from atomic write to file times → [CLI.md](CLI.md#output-files). |
 | CLI batch (`test_cli.py`) | A corrupt file fails only that file; source hashes and mtimes are unchanged. |
 | CLI re-run (`test_cli.py`) | Second run, also as a dry run → existing output and naming time → [CLI.md](CLI.md#output-files); other skips and failures are unchanged. |
-| CLI run on output (`test_cli.py`) | Every file → `already_valid` → [REPAIRS.md](REPAIRS.md#status). |
+| CLI run on output (`test_cli.py`) | Every file → [REPAIRS.md](REPAIRS.md#status). |
 | CLI modes (`test_cli.py`) | Dry run writes nothing; flatten; no recursion; single-file input; `--force`; `--no-date-prefix`; `--make`/`--model`, and a rejected value with its message. |
 | CLI refusals (`test_cli.py`) | Every refusal, also with a path in another letter case and with a failing identity check; its own message is printed; nothing is written → [CLI.md](CLI.md#source-safety). |
 | CLI write safety (`test_cli.py`, `test_output.py`) | Symlinked output folder, with and without `--force` → [CLI.md](CLI.md#output-files); hard-linked or unwritable report → [CLI.md](CLI.md#report); every source unchanged. |
