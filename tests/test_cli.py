@@ -7,10 +7,11 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import fields
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -411,6 +412,28 @@ def test_changed_mtime_writes_a_new_copy(tmp_path: Path) -> None:
     assert sorted(p.name for p in (out / "DCIM").iterdir()) == [
         f"{PREFIX}PICT0001.jpg",
         "20261114-100000_PICT0001.jpg",
+    ]
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset is POSIX only")
+def test_changed_time_zone_writes_a_new_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    capture = datetime(2026, 4, 2, 8, 30, 0, tzinfo=UTC)
+    card = reused_card(tmp_path, 1, capture)  # no EXIF date: rule 1a, local wall-clock time
+    try:
+        for tz in ("UTC0", "JST-9"):
+            monkeypatch.setenv("TZ", tz)
+            time.tzset()
+            assert run(card, "-o", out, "--report", report) == 0
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+    assert summary_of(report)["repaired"] == 1  # not matched as `exists`
+    assert sorted(p.name for p in (out / "DCIM").iterdir()) == [
+        "20260402-083000_PICT0001.jpg",
+        "20260402-173000_PICT0001.jpg",
     ]
 
 

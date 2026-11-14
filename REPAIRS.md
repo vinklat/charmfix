@@ -37,7 +37,8 @@ Applied in this order; tag IDs are hexadecimal. Only a [defect](#defects) trigge
 | # | Tag(s) | Rule |
 | -- | -- | -- |
 | 1 | DateTimeOriginal `9003`, DateTimeDigitized `9004`, DateTime `0132` | All three present and exactly `YYYY:MM:DD HH:MM:SS` → kept as they are. |
-|  | Capture time | DateTimeOriginal when the dates are kept; otherwise the first value that parses, in the order above; all three tags are set to it. |
+|  | Capture time (kept) | DateTimeOriginal. |
+|  | Capture time (repaired) | The first value that parses, in the order above; all three tags are set to it. |
 |  | Accepted forms | Standard form plus `2026:03:03:12:16:29`, `…T…` and `…-…` separators. |
 | 1a | Date fallback | No value parses → the source file's modification time, as local wall-clock time (`timestamp_source=file_mtime`). The time of the run is never used. |
 | 1b | Date sanity | A date before 2000 or more than a day in the future → warning; the date is still used. |

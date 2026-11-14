@@ -67,10 +67,11 @@ Files are visited in sorted order. Symlinked folders inside the input are not fo
 | Name clashes in one run | Compared case-insensitively; later files get `_1`, `_2`, … before the extension. |
 | Existing output | `skipped` (`exists`) and left untouched, before the output is built. `--force` replaces it. |
 | Re-run | Over the same sources, every file gets the same name again. |
-| Changed capture time | A file named from its modification time ([rule 1a](REPAIRS.md#rules)) gets another name once that time or the computer's time zone changes, and a new copy is written. |
+| Changed capture time | A file named from its modification time → [REPAIRS.md](REPAIRS.md#rules) (rule 1a) gets another name once that time or the computer's time zone changes. |
+| Renamed on a re-run | That file is not matched, and a new copy is written. |
 | Clash numbers on a re-run | `_n` numbers follow the order in which clashing files are named in that run. |
 | Shifted clash numbers | A file that failed before naming, or is new, can be skipped as `exists` against another file's output, which then gets a new `_n` copy. |
-| Other prefix setting | An output written with the other `--no-date-prefix` setting, or by a version without the prefix, has another name: it is not matched, and a new copy is written. |
+| Other prefix setting | An output written with the other `--no-date-prefix` setting has another name: it is not matched, and a new copy is written. |
 | Symlinked folder | A folder in the output tree that leads outside the output folder → that file `failed`; nothing is written through it. |
 | Atomic write | Temp file `.charmfix-*.tmp` in the target folder → fsync → read back and compare → publish under the final name. |
 | Publish without `--force` | Hard link to the final name; the link fails if the name exists, so another writer is never overwritten. |
