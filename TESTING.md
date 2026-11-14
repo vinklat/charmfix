@@ -34,9 +34,10 @@ Tests assert the owning contract directly; its values are not copied here.
 | Repair target text (`test_repair.py`) | Accepted boundaries and each rejected kind → [REPAIRS.md](REPAIRS.md#camera-identity), for Make and Model, each naming its field. |
 | Repair round trip (`test_repair.py`) | Every case runs plan → write → splice → verify, re-reads the output, and a second run with the same options gives `already_valid` and no warning the first did not → [REPAIRS.md](REPAIRS.md#camera-identity). |
 | Output validity (`test_external.py`) | Per generated fixture: identical pixels and image-data hash, `exiftool -validate` OK, `sips` size and date. |
-| Atomic writes (`test_output.py`) | Every row except disk full → [CLI.md](CLI.md#output-files). |
+| Output names (`test_output.py`, `test_cli.py`) | Every row from path to other prefix setting, including a year below 1000 → [CLI.md](CLI.md#output-files). |
+| Atomic writes (`test_output.py`) | Every row from atomic write to file times → [CLI.md](CLI.md#output-files). |
 | CLI batch (`test_cli.py`) | A corrupt file fails only that file; source hashes and mtimes are unchanged. |
-| CLI re-run (`test_cli.py`) | Second run → only `exists` skips; run on the output → all `already_valid`. |
+| CLI re-run (`test_cli.py`) | Second run → only `exists` skips, each with its `output` and nothing built, also as a dry run; run on the output → all `already_valid`. |
 | CLI modes (`test_cli.py`) | Dry run writes nothing; flatten; no recursion; single-file input; `--force`; `--no-date-prefix`; `--make`/`--model`, and a rejected value with its message. |
 | CLI refusals (`test_cli.py`) | Every refusal, also with a path in another letter case and with a failing identity check; its own message is printed; nothing is written → [CLI.md](CLI.md#source-safety). |
 | CLI write safety (`test_cli.py`, `test_output.py`) | Symlinked output folder, with and without `--force` → [CLI.md](CLI.md#output-files); hard-linked or unwritable report → [CLI.md](CLI.md#report); every source unchanged. |

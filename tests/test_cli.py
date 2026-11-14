@@ -156,6 +156,7 @@ def test_batch_run(
     assert by_path["DCIM/generated/PICT0102.jpg"]["status"] == "failed"
     assert by_path["DCIM/generated/PICT0102.jpg"]["output"] is None  # failed before naming
     assert by_path["DCIM/generated/notes.jpg"]["reason"] == "not JPEG content"
+    assert by_path["DCIM/generated/notes.jpg"]["output"] is None  # skipped before naming
     for name in ("DCIM/model_1987/PICT0010.jpg", "DCIM/model_2000/PICT0023.jpg"):
         assert by_path[name]["status"] == "repaired"
         assert by_path[name]["date_written"] == "2026:04:02 08:30:00"
@@ -263,6 +264,16 @@ def test_dry_run_writes_nothing(card: Path, tmp_path: Path) -> None:
     assert not out.exists()
 
 
+def test_dry_run_into_filled_output(card: Path, tmp_path: Path) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    run(card, "-o", out)
+    before = state(out)
+    assert run(card, "-o", out, "--dry-run", "--report", report) == 1
+    summary = json.loads(report.read_text())["summary"]
+    assert summary["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    assert state(out) == before
+
+
 def test_flatten_and_no_recursion(card: Path, tmp_path: Path) -> None:
     out = tmp_path / "flat"
     run(card / "DCIM", "-o", out, "--no-preserve-structure")
@@ -337,6 +348,76 @@ def test_no_date_prefix_keeps_source_names(tmp_path: Path) -> None:
     assert run(tmp_path / "cards", *args) == 0
     assert sorted(p.name for p in out.iterdir()) == ["PICT0001.jpg", "PICT0001_1.jpg"]
     assert json.loads(report.read_text())["options"]["date_prefix"] is False
+
+
+def summary_of(report: Path) -> dict[str, object]:
+    summary: dict[str, object] = json.loads(report.read_text())["summary"]
+    return summary
+
+
+def test_flatten_rerun_keeps_numbered_names(tmp_path: Path) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    for session in (1, 2):  # the same name and capture time on two cards
+        reused_card(tmp_path / "cards", session, datetime(2026, 4, 2, 8, 30, 0))
+    args: list[str | Path] = [tmp_path / "cards", "-o", out, "--no-preserve-structure"]
+    args += ["--report", report]
+    assert run(*args) == 0
+    names = [f"{PREFIX}PICT0001.jpg", f"{PREFIX}PICT0001_1.jpg"]
+    assert sorted(p.name for p in out.iterdir()) == names
+    assert run(*args) == 0
+    assert summary_of(report)["skipped_reasons"] == {"exists": 2}
+    assert sorted(p.name for p in out.iterdir()) == names
+
+
+def test_other_prefix_setting_writes_a_new_copy(tmp_path: Path) -> None:
+    src, out, report = single_jpeg(tmp_path), tmp_path / "out", tmp_path / "r.json"
+    os.utime(src, (MTIME, MTIME))
+    assert run(src, "-o", out, "--no-date-prefix") == 0
+    assert run(src, "-o", out, "--report", report) == 0
+    assert summary_of(report)["repaired"] == 1  # not matched as `exists`
+    assert sorted(p.name for p in out.iterdir()) == [f"{PREFIX}x.jpg", "x.jpg"]
+
+
+def test_changed_mtime_writes_a_new_copy(tmp_path: Path) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    card = reused_card(tmp_path, 1, datetime(2026, 4, 2, 8, 30, 0))  # no EXIF date: rule 1a
+    assert run(card, "-o", out) == 0
+    later = datetime(2026, 11, 14, 10, 0, 0).timestamp()
+    os.utime(card / "DCIM" / "PICT0001.jpg", (later, later))  # e.g. copied again without -p
+    assert run(card, "-o", out, "--report", report) == 0
+    assert summary_of(report)["repaired"] == 1
+    assert sorted(p.name for p in (out / "DCIM").iterdir()) == [
+        f"{PREFIX}PICT0001.jpg",
+        "20261114-100000_PICT0001.jpg",
+    ]
+
+
+def test_failed_file_shifts_clash_numbers_on_rerun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The documented limit of CLI.md "Clash numbers on a re-run"."""
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    for session in (1, 2):
+        reused_card(tmp_path / "cards", session, datetime(2026, 4, 2, 8, 30, 0))
+    args: list[str | Path] = [tmp_path / "cards", "-o", out, "--no-preserve-structure"]
+    args += ["--report", report]
+
+    def flaky(path: Path, *rest: object, **kw: object) -> object:
+        if "session1" in Path(path).parts:  # a read error that goes away
+            raise OSError(errno.EIO, "Input/output error")
+        return open(path, *rest, **kw)  # type: ignore[call-overload]
+
+    with monkeypatch.context() as m:
+        m.setattr(pipeline, "open", flaky, raising=False)
+        assert run(*args) == 1
+    assert [p.name for p in out.iterdir()] == [f"{PREFIX}PICT0001.jpg"]  # session 2's image
+
+    assert run(*args) == 0
+    files = {f["rel_path"]: f for f in json.loads(report.read_text())["files"]}
+    first, second = files["session1/DCIM/PICT0001.jpg"], files["session2/DCIM/PICT0001.jpg"]
+    assert (first["status"], first["reason"]) == ("skipped", "exists")
+    assert first["output"] == f"{PREFIX}PICT0001.jpg"
+    assert second["output"] == f"{PREFIX}PICT0001_1.jpg"  # a second copy of session 2
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
