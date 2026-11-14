@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import builtins
 import errno
 import hashlib
 import json
@@ -7,11 +8,13 @@ import os
 import shutil
 import sys
 import tempfile
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from dataclasses import fields
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import IO, Any
 
 import pytest
 from helpers import (
@@ -33,6 +36,7 @@ from charmfix.exif_read import read_exif
 from charmfix.repair import RepairOptions
 
 MTIME = datetime(2026, 4, 2, 8, 30, 0).timestamp()
+PREFIX = "20260402-083000_"  # MTIME as an output name prefix
 OVERLAP = "input and output folders must not overlap"
 REPORT_INSIDE = "the report must not be written inside the input folder"
 FILE_OUTPUT = "the output folder must not be the input file's folder"
@@ -91,11 +95,44 @@ def locked(folder: Path) -> Iterator[Path]:
         folder.chmod(0o755)
 
 
+@contextmanager
+def forbid_build(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Fail on any ``pipeline.build`` call inside the block: existing outputs are skipped first."""
+
+    def build_called(*_: object) -> bytes:
+        pytest.fail("an existing output was built again")  # not caught by process_file
+
+    with monkeypatch.context() as m:
+        m.setattr(pipeline, "build", build_called)
+        yield
+
+
+def exists_outputs(report: Path) -> dict[str, str]:
+    """``rel_path`` → ``output`` of every file the report skipped as ``exists``."""
+    files = json.loads(report.read_text())["files"]
+    return {f["rel_path"]: f["output"] for f in files if f["reason"] == "exists"}
+
+
+def summary_of(report: Path) -> dict[str, object]:
+    summary: dict[str, object] = json.loads(report.read_text())["summary"]
+    return summary
+
+
 def single_jpeg(tmp_path: Path) -> Path:
     src = tmp_path / "in" / "x.jpg"
     src.parent.mkdir()
     src.write_bytes(charmera_layout(make_jpeg()))
+    os.utime(src, (MTIME, MTIME))  # no EXIF: the output is named by this time
     return src
+
+
+def reused_card(root: Path, session: int, capture_time: datetime) -> Path:
+    """A card emptied and reused: each session restarts the camera's file numbers."""
+    src = root / f"session{session}" / "DCIM" / "PICT0001.jpg"
+    src.parent.mkdir(parents=True)
+    src.write_bytes(charmera_layout(make_jpeg()))
+    os.utime(src, (capture_time.timestamp(), capture_time.timestamp()))
+    return src.parents[1]
 
 
 @pytest.fixture
@@ -130,7 +167,9 @@ def run(*args: str | Path) -> int:
     return cli.main([str(a) for a in args])
 
 
-def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_batch_run(
+    card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     out, report_path = tmp_path / "out", tmp_path / "report.json"
     before = snapshot(card)
 
@@ -150,12 +189,15 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
         "DCIM/generated/notes.jpg",
     }
     assert by_path["DCIM/generated/PICT0102.jpg"]["status"] == "failed"
+    assert by_path["DCIM/generated/PICT0102.jpg"]["output"] is None  # failed before naming
     assert by_path["DCIM/generated/notes.jpg"]["reason"] == "not JPEG content"
+    assert by_path["DCIM/generated/notes.jpg"]["output"] is None  # skipped before naming
     for name in ("DCIM/model_1987/PICT0010.jpg", "DCIM/model_2000/PICT0023.jpg"):
         assert by_path[name]["status"] == "repaired"
         assert by_path[name]["date_written"] == "2026:04:02 08:30:00"
     gen = by_path["DCIM/generated/PICT0100.JPG"]
     assert gen["status"] == "repaired"
+    assert gen["output"] == "DCIM/generated/20260303-121629_PICT0100.JPG"  # the EXIF date
     assert gen["makernote"] == "discarded(invalid)"
     assert gen["date_written"] == "2026:03:03 12:16:29"
 
@@ -172,9 +214,9 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
         "UserComment": "kept",
     }
 
-    # outputs mirror the folder structure and keep the source mtime
-    written = out / "DCIM/model_1987/PICT0010.jpg"
-    assert written.exists() and (out / "DCIM/model_2000/PICT0023.jpg").exists()
+    # outputs mirror the folder structure, start with the capture time and keep the source mtime
+    written = out / f"DCIM/model_1987/{PREFIX}PICT0010.jpg"
+    assert written.exists() and (out / f"DCIM/model_2000/{PREFIX}PICT0023.jpg").exists()
     assert written.stat().st_mtime == MTIME
     assert not (out / ".Trashes").exists()
     assert not list(out.rglob("._*"))
@@ -182,17 +224,19 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert jpeg.image_data(jpeg.parse(written.read_bytes())) == jpeg.image_data(src_jf)
     assert "repaired" in capsys.readouterr().out
 
-    # second run: nothing is rewritten, no _1 duplicates
+    # second run: nothing is built or rewritten, no _1 duplicates
     out_before = snapshot(out)
-    assert run(card, "-o", out, "--report", report_path) == 1
-    second = json.loads(report_path.read_text())["summary"]
-    assert second["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    with forbid_build(monkeypatch):
+        assert run(card, "-o", out, "--report", report_path) == 1
+    assert summary_of(report_path)["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    exists = exists_outputs(report_path)
+    assert exists["DCIM/model_1987/PICT0010.jpg"] == f"DCIM/model_1987/{PREFIX}PICT0010.jpg"
     assert snapshot(out) == out_before
 
-    # running on the output: everything is already valid and copied unchanged
+    # running on the output: everything is already valid and copied unchanged, under its name
     out2 = tmp_path / "out2"
     assert run(out, "-o", out2, "--report", report_path) == 0
-    third = json.loads(report_path.read_text())["summary"]
+    third = summary_of(report_path)
     assert third["already_valid"] == 4 and third["repaired"] == 0
     for rel, (digest, _) in snapshot(out).items():
         assert snapshot(out2)[rel][0] == digest
@@ -201,7 +245,7 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
 def test_force_rewrites(card: Path, tmp_path: Path) -> None:
     out = tmp_path / "out"
     run(card, "-o", out)
-    target = out / "DCIM/model_1987/PICT0010.jpg"
+    target = out / f"DCIM/model_1987/{PREFIX}PICT0010.jpg"
     target.write_bytes(b"stale")
     run(card, "-o", out, "--force")
     assert target.read_bytes() != b"stale"
@@ -212,11 +256,15 @@ def test_symlinked_output_folder_never_reaches_source(
     card: Path, tmp_path: Path, force: list[str]
 ) -> None:
     out, report = tmp_path / "out", tmp_path / "r.json"
+    elsewhere = tmp_path / "elsewhere"  # a copy of the card's DCIM, outside the output folder
+    shutil.copytree(card / "DCIM", elsewhere)
+    # an output already there: an `exists` check through the link would skip the file
+    (elsewhere / f"model_1987/{PREFIX}PICT0010.jpg").write_bytes(b"old")
     out.mkdir()
-    (out / "DCIM").symlink_to(card / "DCIM")
-    before = snapshot(card)
+    (out / "DCIM").symlink_to(elsewhere)
+    before = snapshot(card), snapshot(elsewhere)
     assert run(card, "-o", out, *force, "--report", report) == 1
-    assert snapshot(card) == before
+    assert (snapshot(card), snapshot(elsewhere)) == before
     files = json.loads(report.read_text())["files"]
     repaired = [f for f in files if f["rel_path"] == "DCIM/model_1987/PICT0010.jpg"]
     assert repaired[0]["status"] == "failed"
@@ -250,11 +298,31 @@ def test_dry_run_writes_nothing(card: Path, tmp_path: Path) -> None:
     assert not out.exists()
 
 
+def test_dry_run_into_filled_output(
+    card: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    run(card, "-o", out, "--report", report)
+    written = {f["rel_path"]: f["output"] for f in json.loads(report.read_text())["files"]}
+    before = state(out)
+    with forbid_build(monkeypatch):
+        assert run(card, "-o", out, "--dry-run", "--report", report) == 1
+    assert summary_of(report)["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    exists = exists_outputs(report)
+    assert len(exists) == 4 and all(written[rel] == output for rel, output in exists.items())
+    assert state(out) == before
+
+
 def test_flatten_and_no_recursion(card: Path, tmp_path: Path) -> None:
     out = tmp_path / "flat"
     run(card / "DCIM", "-o", out, "--no-preserve-structure")
     names = sorted(p.name for p in out.iterdir())
-    assert names == ["PICT0010.jpg", "PICT0023.jpg", "PICT0100.JPG", "PICT0101.jpg"]
+    assert names == [
+        "20260101-000000_PICT0101.jpg",
+        "20260303-121629_PICT0100.JPG",
+        f"{PREFIX}PICT0010.jpg",
+        f"{PREFIX}PICT0023.jpg",
+    ]
     out2 = tmp_path / "flat2"
     run(card / "DCIM", "-o", out2, "--no-recursive")
     assert not out2.exists()  # no JPEGs directly in DCIM
@@ -285,7 +353,115 @@ def test_report_option_names_do_not_collide() -> None:
 def test_single_file_input(tmp_path: Path) -> None:
     src = single_jpeg(tmp_path)
     assert run(src, "-o", tmp_path / "out") == 0
-    assert (tmp_path / "out" / "x.jpg").exists()
+    assert (tmp_path / "out" / f"{PREFIX}x.jpg").exists()
+
+
+@pytest.mark.parametrize("second", ["reused-card", "touched-source"])
+def test_new_capture_time_writes_a_new_copy(tmp_path: Path, second: str) -> None:
+    """A card whose camera numbering restarted, or a source copied again without ``cp -p``."""
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    card = reused_card(tmp_path, 1, datetime(2026, 4, 2, 8, 30, 0))  # no EXIF date: rule 1a
+    assert run(card, "-o", out) == 0
+    later = datetime(2026, 5, 9, 17, 5, 42)
+    if second == "reused-card":
+        card = reused_card(tmp_path, 2, later)
+    else:
+        os.utime(card / "DCIM" / "PICT0001.jpg", (later.timestamp(), later.timestamp()))
+    assert run(card, "-o", out, "--report", report) == 0
+    assert summary_of(report)["repaired"] == 1  # not skipped as `exists`
+    assert sorted(p.name for p in (out / "DCIM").iterdir()) == [
+        f"{PREFIX}PICT0001.jpg",
+        "20260509-170542_PICT0001.jpg",
+    ]
+
+
+def test_no_date_prefix_keeps_source_names(tmp_path: Path) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    for session, day in ((1, 2), (2, 9)):
+        reused_card(tmp_path / "cards", session, datetime(2026, 4, day, 8, 30, 0))
+    args: list[str | Path] = ["-o", out, "--no-date-prefix", "--no-preserve-structure"]
+    args += ["--report", report]
+    assert run(tmp_path / "cards", *args) == 0
+    assert sorted(p.name for p in out.iterdir()) == ["PICT0001.jpg", "PICT0001_1.jpg"]
+    assert json.loads(report.read_text())["options"]["date_prefix"] is False
+
+
+def test_flatten_rerun_keeps_numbered_names(tmp_path: Path) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    for session in (1, 2):  # the same name and capture time on two cards
+        reused_card(tmp_path / "cards", session, datetime(2026, 4, 2, 8, 30, 0))
+    args: list[str | Path] = [tmp_path / "cards", "-o", out, "--no-preserve-structure"]
+    args += ["--report", report]
+    assert run(*args) == 0
+    names = [f"{PREFIX}PICT0001.jpg", f"{PREFIX}PICT0001_1.jpg"]
+    assert sorted(p.name for p in out.iterdir()) == names
+    assert run(*args) == 0
+    assert summary_of(report)["skipped_reasons"] == {"exists": 2}
+    assert sorted(p.name for p in out.iterdir()) == names
+
+
+def test_other_prefix_setting_writes_a_new_copy(tmp_path: Path) -> None:
+    src, out, report = single_jpeg(tmp_path), tmp_path / "out", tmp_path / "r.json"
+    assert run(src, "-o", out, "--no-date-prefix") == 0
+    assert run(src, "-o", out, "--report", report) == 0
+    assert summary_of(report)["repaired"] == 1  # not matched as `exists`
+    assert sorted(p.name for p in out.iterdir()) == [f"{PREFIX}x.jpg", "x.jpg"]
+
+
+@pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset is POSIX only")
+def test_changed_time_zone_writes_a_new_copy(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    out, report = tmp_path / "out", tmp_path / "r.json"
+    capture = datetime(2026, 4, 2, 8, 30, 0, tzinfo=UTC)
+    card = reused_card(tmp_path, 1, capture)  # no EXIF date: rule 1a, local wall-clock time
+    try:
+        with monkeypatch.context() as m:
+            for tz in ("UTC0", "JST-9"):
+                m.setenv("TZ", tz)
+                time.tzset()
+                assert run(card, "-o", out, "--report", report) == 0
+    finally:
+        time.tzset()  # after the context restored TZ
+    assert summary_of(report)["repaired"] == 1  # not matched as `exists`
+    assert sorted(p.name for p in (out / "DCIM").iterdir()) == [
+        "20260402-083000_PICT0001.jpg",
+        "20260402-173000_PICT0001.jpg",
+    ]
+
+
+def flaky_open(path: Path, mode: str = "r") -> IO[Any]:
+    """``open`` with a read error on the first session's files that goes away later."""
+    if "session1" in Path(path).parts:
+        raise OSError(errno.EIO, "Input/output error")
+    return builtins.open(path, mode)
+
+
+@pytest.mark.parametrize("cause", ["failed", "new"])
+def test_shifted_clash_numbers_on_rerun(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, cause: str
+) -> None:
+    """The documented limit of CLI.md "Shifted clash numbers"."""
+    out, report, cards = tmp_path / "out", tmp_path / "r.json", tmp_path / "cards"
+    taken = datetime(2026, 4, 2, 8, 30, 0)  # the same name and capture time on two cards
+    args = (cards, "-o", out, "--no-preserve-structure", "--report", report)
+    reused_card(cards, 2, taken)
+    if cause == "new":
+        assert run(*args) == 0
+        reused_card(cards, 1, taken)  # added after the first run; sorts first
+    else:
+        reused_card(cards, 1, taken)
+        with monkeypatch.context() as m:
+            m.setattr(pipeline, "open", flaky_open, raising=False)  # pipeline's builtin open
+            assert run(*args) == 1
+    assert [p.name for p in out.iterdir()] == [f"{PREFIX}PICT0001.jpg"]  # session 2's image
+
+    assert run(*args) == 0
+    files = {f["rel_path"]: f for f in json.loads(report.read_text())["files"]}
+    first, second = files["session1/DCIM/PICT0001.jpg"], files["session2/DCIM/PICT0001.jpg"]
+    assert (first["status"], first["reason"]) == ("skipped", "exists")
+    assert first["output"] == f"{PREFIX}PICT0001.jpg"
+    assert second["output"] == f"{PREFIX}PICT0001_1.jpg"  # a second copy of session 2
 
 
 @pytest.mark.skipif(not hasattr(os, "mkfifo"), reason="needs named pipes")
@@ -315,7 +491,7 @@ def test_no_assume_charmera_flag(card: Path, tmp_path: Path) -> None:
 def test_custom_make_and_model(tmp_path: Path) -> None:
     src, out, report = single_jpeg(tmp_path), tmp_path / "out", tmp_path / "r.json"
     assert run(src, "-o", out, "--make", "Acme", "--model", "Snap 1", "--report", report) == 0
-    tiff = jpeg.parse((out / "x.jpg").read_bytes()).exif_tiff()
+    tiff = jpeg.parse((out / f"{PREFIX}x.jpg").read_bytes()).exif_tiff()
     assert tiff is not None
     exif = read_exif(tiff)
     written = [exif.get("0th", tag) for tag in (0x010F, 0x0110)]
@@ -431,9 +607,9 @@ def test_overlap_refused_when_identity_check_fails(
 @pytest.mark.parametrize(
     ("args", "output"),
     [
-        (["-o", "{folder}/fixed"], "{folder}/fixed/x.jpg"),
-        (["-o", "{tmp}"], "{tmp}/x.jpg"),
-        (["-o", "{tmp}/out", "--report", "{folder}/r.json"], "{tmp}/out/x.jpg"),
+        (["-o", "{folder}/fixed"], "{folder}/fixed/{prefix}x.jpg"),
+        (["-o", "{tmp}"], "{tmp}/{prefix}x.jpg"),
+        (["-o", "{tmp}/out", "--report", "{folder}/r.json"], "{tmp}/out/{prefix}x.jpg"),
     ],
     ids=["output-inside", "output-parent", "report-next-to-file"],
 )
@@ -442,7 +618,7 @@ def test_single_file_may_write_near_source(tmp_path: Path, args: list[str], outp
     paths = {"src": src, "folder": src.parent, "tmp": tmp_path}
     source = src.read_bytes()
     assert run(src, *fill(args, **paths)) == 0
-    assert Path(output.format(**paths)).exists()
+    assert Path(output.format(**paths, prefix=PREFIX)).exists()
     assert src.read_bytes() == source
 
 
@@ -466,7 +642,7 @@ def test_disk_full_stops_batch(
     assert not list(out.rglob(".charmfix-*.tmp"))
 
 
-@pytest.mark.parametrize("step", ["prepare", "process_file"])  # discovery, then processing
+@pytest.mark.parametrize("step", ["discover", "process_file"])  # discovery, then processing
 def test_interrupt_exits_130(
     card: Path,
     tmp_path: Path,
@@ -474,14 +650,14 @@ def test_interrupt_exits_130(
     capsys: pytest.CaptureFixture[str],
     step: str,
 ) -> None:
-    def interrupt(*_: object) -> None:
+    def interrupt(*_: object, **__: object) -> None:
         raise KeyboardInterrupt
 
     monkeypatch.setattr(cli, step, interrupt)
     report = tmp_path / "r.json"
     assert run(card, "-o", tmp_path / "out", "--report", report) == 130
     assert "STOPPED EARLY: interrupted" in capsys.readouterr().out
-    assert json.loads(report.read_text())["summary"]["stopped"] == "interrupted"
+    assert summary_of(report)["stopped"] == "interrupted"
 
 
 def test_samples_are_present() -> None:

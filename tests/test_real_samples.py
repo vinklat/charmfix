@@ -16,7 +16,7 @@ from PIL import Image, ImageChops
 from charmfix import jpeg
 from charmfix.discovery import Candidate
 from charmfix.exif_read import read_exif
-from charmfix.pipeline import Job, RunOptions, process_file
+from charmfix.pipeline import RunOptions, process_file
 from charmfix.repair import RepairOptions
 
 PLANTED = datetime(2026, 7, 14, 18, 45, 12)
@@ -25,10 +25,10 @@ pytestmark = pytest.mark.skipif(not REAL_SAMPLES, reason="no real samples in tes
 
 
 def run_one(src: Path, out_dir: Path, *, assume_charmera: bool = True) -> tuple[object, Path]:
-    dest = out_dir / src.name
     opts = RunOptions(out_dir, repair=RepairOptions(assume_charmera=assume_charmera))
-    result = process_file(Job(Candidate(src, Path(src.name)), dest), opts)
-    return result, dest
+    result = process_file(Candidate(src, Path(src.name)), opts, opts.output_names())
+    assert result.output is not None, result.error
+    return result, out_dir / result.output
 
 
 @pytest.fixture(params=REAL_SAMPLES, ids=lambda p: p.parent.name)
@@ -47,6 +47,7 @@ def test_real_sample_repaired(sample: Path, tmp_path: Path) -> None:
     assert result.status == "repaired", result.error  # type: ignore[attr-defined]
     assert result.timestamp_source == "file_mtime"  # type: ignore[attr-defined]
     assert result.identity == "charmera(assumed)"  # type: ignore[attr-defined]
+    assert dest.name == f"{PLANTED:%Y%m%d-%H%M%S}_{sample.name}"  # named by the date fallback
 
     src_bytes, out_bytes = sample.read_bytes(), dest.read_bytes()
     src_jf, out_jf = jpeg.parse(src_bytes), jpeg.parse(out_bytes)
@@ -79,6 +80,7 @@ def test_real_sample_repaired(sample: Path, tmp_path: Path) -> None:
     again, again_dest = run_one(dest, tmp_path / "out2")
     assert again.status == "already_valid"  # type: ignore[attr-defined]
     assert again_dest.read_bytes() == out_bytes
+    assert again_dest.name == dest.name  # the prefix is not added twice
 
 
 def test_real_sample_without_assumption(sample: Path, tmp_path: Path) -> None:

@@ -23,6 +23,7 @@ root is the file's folder.
 | `-v`, `--verbose` | off | Log every file and every change. |
 | `--report` | none | Write the [JSON report](#report) to this path. |
 | `--no-preserve-structure` | mirror folders | Put every output directly in the output folder. |
+| `--no-date-prefix` | prefix | Keep the source file name → [output files](#output-files). |
 | `--no-assume-charmera` | assume | Turn off `charmera(assumed)` → [REPAIRS.md](REPAIRS.md#camera-identity). |
 | `--make` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Make; its text rules → [REPAIRS.md](REPAIRS.md#camera-identity). |
 | `--model` | → [REPAIRS.md](REPAIRS.md#camera-identity) | Target Model; same rules as `--make`. |
@@ -59,9 +60,23 @@ Files are visited in sorted order. Symlinked folders inside the input are not fo
 | Rule | Behavior |
 | -- | -- |
 | Path | Input-relative path under the output folder; with `--no-preserve-structure`, the file name only. |
-| Symlinked folder | A folder in the output tree that leads outside the output folder → that file `failed`; nothing is written through it. |
+| Date prefix | The file name starts with the capture time → [REPAIRS.md](REPAIRS.md#rules) (rule 1) as `YYYYMMDD-HHMMSS_`. |
+| Prefixed source | A name that already starts with exactly that prefix is kept, so a run on the output keeps its names. |
+| Stale prefix | A name that starts with another time is prefixed again, so it never shows a date its EXIF no longer has. |
+| Naming time | A file is named after it is analysed. |
+| Unnamed file | A file skipped or failed before it is named has no `output` → [report](#report). |
 | Name clashes in one run | Compared case-insensitively; later files get `_1`, `_2`, … before the extension. |
-| Existing output | `skipped` (`exists`) and left untouched; re-runs never create `_n` copies. `--force` replaces it. |
+| Existing output | `skipped` (`exists`) and left untouched. |
+| Existing-output check | Runs before the output is built. |
+| Existing output with `--force` | Replaced. |
+| Re-run | Over the same sources, a file named in both runs gets the same name again, unless a row below changes it. |
+| Changed modification time | A file named from its modification time → [REPAIRS.md](REPAIRS.md#rules) (rule 1a) gets another name once that time changes. |
+| Changed time zone | Such a file also gets another name once the computer's time zone changes. |
+| New name on a re-run | A file whose output name changed since the last run is not matched, and a new copy is written. |
+| Clash numbers on a re-run | `_n` numbers follow the order in which clashing files are named in that run. |
+| Shifted clash numbers | A file that failed before naming, or is new, can be skipped as `exists` against another file's output, which then gets a new `_n` copy. |
+| Other prefix setting | An output written with the other `--no-date-prefix` setting has another name: it is not matched, and a new copy is written. |
+| Symlinked folder | A folder in the output tree that leads outside the output folder → that file `failed`; nothing is written through it. |
 | Atomic write | Temp file `.charmfix-*.tmp` in the target folder → fsync → read back and compare → publish under the final name. |
 | Publish without `--force` | Hard link to the final name; the link fails if the name exists, so another writer is never overwritten. |
 | No hard links | (FAT/exFAT and similar) Without `--force`, the name is reserved with `O_EXCL`, then the temp file is moved over it. |
@@ -82,7 +97,7 @@ its folder (often `~` or `~/Pictures`) may hold the output folder or the report.
 | -- | -- | -- |
 | Folder | Output folder equals, contains or is inside the input folder | Outputs would be read on the next run. |
 | Folder | `--report` inside the input folder | The input folder stays as the camera wrote it. |
-| Single file | Output folder is the file's folder | The output has the source's name; `--force` would replace it. |
+| Single file | Output folder is the file's folder | The output can keep the source's name → [output files](#output-files); `--force` would replace it. |
 | Single file | `--report` is the input file | The report would replace the source. |
 
 ## Console
@@ -102,7 +117,7 @@ over the path, so an existing file there is replaced, never written through.
 | Key | Content |
 | -- | -- |
 | `tool`, `version` | `"charmfix"` and the package version. |
-| `options` | `recursive`, `preserve_structure`, `force`, `dry_run`, `assume_charmera`, `make`, `model`. |
+| `options` | `recursive`, `preserve_structure`, `force`, `dry_run`, `date_prefix`, `assume_charmera`, `make`, `model`. |
 | `summary` | The console summary counts, plus `processed`, `skipped_reasons` and `stopped`. |
 | `files[]` | One object per candidate: `rel_path`, `status`, `output`, `reason`, `error`, `sof_size`, `old_sizes`, `raw_date`, `date_written`, `timestamp_source`, `changes`, `exif_rebuilt`, `makernote`, `identity`, `private_text`, `partial_reasons`, `warnings`, `image_sha256`. |
 

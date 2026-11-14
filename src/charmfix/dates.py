@@ -5,8 +5,6 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta
 
-EXIF_FORMAT = "%Y:%m:%d %H:%M:%S"
-
 # Accepts the standard "YYYY:MM:DD HH:MM:SS" and the broken variants seen in the
 # wild, e.g. the Charmera's six-part "YYYY:MM:DD:HH:MM:SS", or "T"/"-" separators.
 _DATE_RE = re.compile(r"^\s*(\d{4})[:\-](\d{2})[:\-](\d{2})[ :T\-](\d{2}):(\d{2}):(\d{2})\s*$")
@@ -42,7 +40,9 @@ def is_normal_form(raw: bytes | str | None) -> bool:
 
 
 def format_exif(dt: datetime) -> str:
-    return dt.strftime(EXIF_FORMAT)
+    """``YYYY:MM:DD HH:MM:SS``, the year always four digits."""
+    # The year by hand: glibc's %Y does not pad years below 1000 before Python 3.14.
+    return f"{dt.year:04d}:{dt:%m:%d %H:%M:%S}"
 
 
 def sanity_warning(dt: datetime, now: datetime) -> str | None:

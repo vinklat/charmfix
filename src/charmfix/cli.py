@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import TextIO
 
 from . import __version__
-from .discovery import unreadable_reason
-from .pipeline import DiskFullError, Job, RunOptions, prepare, process_file
+from .discovery import discover, unreadable_reason
+from .pipeline import DiskFullError, RunOptions, process_file
 from .repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, check_target_text
 from .report import FileResult, Summary, build_report, write_report
 
@@ -92,6 +92,12 @@ def _parser() -> argparse.ArgumentParser:
         dest="preserve_structure",
         action="store_false",
         help="put all outputs directly in the output folder",
+    )
+    p.add_argument(
+        "--no-date-prefix",
+        dest="date_prefix",
+        action="store_false",
+        help="keep the source file names (default: prefix the capture time, YYYYMMDD-HHMMSS_)",
     )
     p.add_argument(
         "--no-assume-charmera",
@@ -205,6 +211,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         preserve_structure=args.preserve_structure,
         force=args.force,
         dry_run=args.dry_run,
+        date_prefix=args.date_prefix,
         repair=RepairOptions(
             assume_charmera=args.assume_charmera, make=args.make, model=args.model
         ),
@@ -221,13 +228,15 @@ def main(argv: Sequence[str] | None = None) -> int:
     results: list[FileResult] = []
     exit_code = EXIT_OK
     try:
-        jobs: list[Job] = prepare(input_path, opts)  # walks the card: Ctrl-C may land here too
-        if not jobs:
+        # walks the card: Ctrl-C may land here too
+        candidates = list(discover(input_path, recursive=opts.recursive))
+        if not candidates:
             log.warning("no .jpg/.jpeg files found in %s", input_path)
-        summary.discovered = len(jobs)
-        for i, job in enumerate(jobs, 1):
-            progress.update(f"[{i}/{len(jobs)}] {job.candidate.rel.as_posix()}")
-            r = process_file(job, opts)
+        summary.discovered = len(candidates)
+        names = opts.output_names()
+        for i, cand in enumerate(candidates, 1):
+            progress.update(f"[{i}/{len(candidates)}] {cand.rel.as_posix()}")
+            r = process_file(cand, opts, names)
             results.append(r)
             summary.add(r)
             _log_result(r)

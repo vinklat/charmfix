@@ -45,7 +45,14 @@ charmfix /Volumes/CHARMERA --dry-run -v        # show what would change, write n
 Without `-o`, copies go to the default output folder → [CLI.md](CLI.md#options). All options, exit
 codes and the report format are in [CLI.md](CLI.md). Each file gets a status →
 [REPAIRS.md](REPAIRS.md#status). Running charmfix again on the same card skips files it has already
-written → [CLI.md](CLI.md#output-files).
+written. With the default date prefix, a file dated from its modification time
+([rule 1a](REPAIRS.md#rules)) gets a new name and is copied again when that time changes (e.g. a
+copy made without `cp -p`) or the computer's time zone changes → [CLI.md](CLI.md#output-files).
+
+**Output names start with the capture time**, e.g. `20260402-083000_PICT0010.jpg`, so a later card
+whose camera numbering restarted is not skipped as already written. `--no-date-prefix` keeps the
+camera's names. A folder filled with the other setting is not matched →
+[CLI.md](CLI.md#output-files).
 
 **Run it on the card itself.** When a file has no usable EXIF date (often no EXIF at all), the
 capture date is the file's modification time, which the camera sets when it takes the photo

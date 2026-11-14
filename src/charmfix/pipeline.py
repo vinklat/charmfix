@@ -10,13 +10,13 @@ from datetime import datetime
 from pathlib import Path
 
 from . import jpeg
-from .discovery import Candidate, discover
+from .discovery import Candidate
 from .exif_read import read_exif
 from .exif_write import ExifTooLargeError, build_exif
 from .output import (
     OutputExistsError,
+    OutputNames,
     OutsideOutputError,
-    assign_outputs,
     check_inside,
     write_atomic,
 )
@@ -38,6 +38,7 @@ class RunOptions:
     preserve_structure: bool = True
     force: bool = False
     dry_run: bool = False
+    date_prefix: bool = True
     # RepairOptions validates its target text when built: before any file is planned.
     repair: RepairOptions = field(default_factory=RepairOptions)
 
@@ -46,17 +47,14 @@ class RunOptions:
         run = {k: v for k, v in asdict(self).items() if k not in ("output_root", "repair")}
         return run | asdict(self.repair)
 
-
-@dataclass(frozen=True)
-class Job:
-    candidate: Candidate
-    dest: Path
+    def output_names(self) -> OutputNames:
+        """A fresh name register for one run."""
+        return OutputNames(self.output_root, preserve_structure=self.preserve_structure)
 
 
-def prepare(input_path: Path, opts: RunOptions) -> list[Job]:
-    candidates = list(discover(input_path, recursive=opts.recursive))
-    dests = assign_outputs((c.rel for c in candidates), opts.output_root, opts.preserve_structure)
-    return [Job(c, d) for c, d in zip(candidates, dests, strict=True)]
+def name_prefix(date_written: str) -> str:
+    """The output-name prefix for an EXIF date: ``YYYY:MM:DD HH:MM:SS`` → ``YYYYMMDD-HHMMSS_``."""
+    return date_written.replace(":", "").replace(" ", "-") + "_"
 
 
 def _error_text(exc: BaseException) -> str:
@@ -66,50 +64,47 @@ def _error_text(exc: BaseException) -> str:
     return f"{exc.__class__.__name__}: {exc}"
 
 
-def rebuild(
+def analyse(
     data: bytes, src_mtime: float, now: datetime, options: RepairOptions
-) -> tuple[jpeg.JpegFile, RepairPlan, bytes]:
-    """Analyse one file in memory and return the verified output bytes.
-
-    Raises JpegError, ExifTooLargeError or VerificationError for files that
-    cannot be repaired safely.
-    """
+) -> tuple[jpeg.JpegFile, RepairPlan]:
+    """Parse one file in memory and plan its repair. Raises JpegError if it cannot be parsed."""
     jf = jpeg.parse(data)
     tiff = jf.exif_tiff()
     exif = read_exif(tiff) if tiff is not None else None
-    plan = plan_repair(jf, exif, src_mtime, now, options)
+    return jf, plan_repair(jf, exif, src_mtime, now, options)
+
+
+def build(jf: jpeg.JpegFile, plan: RepairPlan, data: bytes) -> bytes:
+    """The verified output bytes for an analysed file.
+
+    Raises ExifTooLargeError or VerificationError for files that cannot be repaired safely.
+    """
     if not plan.needs_rebuild:
-        return jf, plan, data  # already valid: byte-for-byte copy
+        return data  # already valid: byte-for-byte copy
     out = jpeg.splice(jf, build_exif(plan))
     verify_output(jf, out, plan)
-    return jf, plan, out
+    return out
 
 
-def process_file(job: Job, opts: RunOptions, now: datetime | None = None) -> FileResult:
-    cand = job.candidate
+def process_file(
+    cand: Candidate, opts: RunOptions, names: OutputNames, now: datetime | None = None
+) -> FileResult:
+    """Process one candidate; its output name is claimed from ``names`` once it is analysed.
+
+    ``names`` is the run's single register (``opts.output_names()``), shared by every call:
+    it keeps output names unique within the run.
+    """
     result = FileResult(rel_path=cand.rel.as_posix(), status="failed")
-    try:
-        result.output = job.dest.relative_to(opts.output_root).as_posix()
-    except ValueError:
-        result.output = job.dest.name
     if cand.skip_reason:
-        result.status, result.reason, result.output = "skipped", cand.skip_reason, None
+        result.status, result.reason = "skipped", cand.skip_reason
         return result
     if cand.error:
         result.error = cand.error
         return result
-    try:  # before the `exists` check, which would follow the symlink
-        check_inside(job.dest, opts.output_root)
-    except OutsideOutputError as exc:
-        result.error = _error_text(exc)
-        return result
-    if not opts.force and job.dest.exists():
-        result.status, result.reason = "skipped", "exists"
-        return result
 
     try:
-        _process(job, opts, result, now or datetime.now())
-    except OutputExistsError:
+        _process(cand, opts, names, result, now or datetime.now())
+    except OutputExistsError:  # another writer created the output after the check
         result.status, result.reason = "skipped", "exists"
     except OSError as exc:
         if exc.errno == errno.ENOSPC:
@@ -123,12 +118,26 @@ def process_file(job: Job, opts: RunOptions, now: datetime | None = None) -> Fil
     return result
 
 
-def _process(job: Job, opts: RunOptions, result: FileResult, now: datetime) -> None:
-    with open(job.candidate.path, "rb") as f:
+def _process(
+    cand: Candidate, opts: RunOptions, names: OutputNames, result: FileResult, now: datetime
+) -> None:
+    with open(cand.path, "rb") as f:
         st = os.fstat(f.fileno())
         data = f.read()
 
-    jf, plan, out = rebuild(data, st.st_mtime, now, opts.repair)
+    jf, plan = analyse(data, st.st_mtime, now, opts.repair)
+    prefix = ""
+    if opts.date_prefix:
+        assert plan.date_written is not None  # rule 1 always sets it, falling back to the mtime
+        prefix = name_prefix(plan.date_written)
+    dest = names.assign(cand.rel, prefix)
+    result.output = dest.relative_to(opts.output_root).as_posix()
+    check_inside(dest, opts.output_root)  # before the `exists` check, which follows symlinks
+    if not opts.force and dest.exists():
+        result.status, result.reason = "skipped", "exists"
+        return
+
+    out = build(jf, plan, data)
     result.sof_size = (jf.width, jf.height)
     result.image_sha256 = jpeg.image_digest(jf)
     result.old_sizes = plan.old_sizes
@@ -145,7 +154,7 @@ def _process(job: Job, opts: RunOptions, result: FileResult, now: datetime) -> N
 
     if not opts.dry_run:
         result.warnings += write_atomic(
-            job.dest,
+            dest,
             out,
             root=opts.output_root,
             force=opts.force,

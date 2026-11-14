@@ -527,6 +527,16 @@ def test_offset_time_kept_when_dates_valid(base_jpeg: bytes) -> None:
     assert r.tag("Exif", 0x9011) == "+01:00"
 
 
+def test_kept_dates_capture_time_is_date_time_original(base_jpeg: bytes) -> None:
+    original, other = "2026:04:02 08:30:00", "2026:05:09 17:05:42"
+    exif = [ascii_(0x9003, original)]
+    exif += [e for e in standard_exif_entries(other) if e.tag != 0x9003]
+    r = repair(with_exif(base_jpeg, build_tiff(standard_ifd0_entries(other), exif)))
+    assert r.plan.timestamp_source == "DateTimeOriginal"
+    assert r.plan.date_written == original
+    assert (r.tag("Exif", 0x9004), r.tag("0th", 0x0132)) == (other, other)  # kept as they are
+
+
 def test_ifd0_size_tags_are_dropped(base_jpeg: bytes) -> None:
     exif = [*standard_exif_entries(), long_(0xA002, 64), long_(0xA003, 48)]
     ifd0 = [*standard_ifd0_entries(), long_(0x0100, 640), long_(0x0101, 480)]

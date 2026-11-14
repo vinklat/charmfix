@@ -26,7 +26,7 @@ from helpers import (
 from PIL import Image, ImageChops
 
 from charmfix import jpeg
-from charmfix.pipeline import rebuild
+from charmfix.pipeline import analyse, build
 from charmfix.repair import RepairOptions
 
 MTIME = datetime(2026, 5, 1, 10, 20, 30).timestamp()
@@ -55,7 +55,8 @@ def repaired(
     thumb = io.BytesIO()
     Image.new("RGB", (16, 12), "blue").save(thumb, "JPEG")
     src = FIXTURES[request.param](base_jpeg, thumb.getvalue())
-    _, _, out = rebuild(src, MTIME, datetime(2026, 11, 6), RepairOptions())
+    jf, plan = analyse(src, MTIME, datetime(2026, 11, 6), RepairOptions())
+    out = build(jf, plan, src)
     dest = tmp_path / f"{request.param}.jpg"
     dest.write_bytes(out)
     return src, dest

@@ -6,7 +6,6 @@ import contextlib
 import errno
 import os
 import tempfile
-from collections.abc import Iterable
 from pathlib import Path
 
 # Errors meaning "this filesystem cannot hard-link" (FAT/exFAT, SMB, ...).
@@ -31,25 +30,28 @@ class OutsideOutputError(Exception):
     """A symlinked folder would send the write outside the output folder."""
 
 
-def assign_outputs(
-    rel_paths: Iterable[Path], output_root: Path, preserve_structure: bool
-) -> list[Path]:
-    """Map input-relative paths to output paths, de-duplicating within this run.
+class OutputNames:
+    """Output paths for one run, assigned in processing order and unique within the run.
 
     Collisions are detected case-insensitively (macOS and FAT are case-insensitive).
     Existing files on disk are *not* considered here: those are skipped later.
     """
-    claimed: set[str] = set()
-    result = []
-    for rel in rel_paths:
-        target = output_root / (rel if preserve_structure else Path(rel.name))
+
+    def __init__(self, root: Path, *, preserve_structure: bool) -> None:
+        self._root, self._preserve_structure = root, preserve_structure
+        self._claimed: set[str] = set()
+
+    def assign(self, rel: Path, prefix: str = "") -> Path:
+        """Claim the output path for the input-relative ``rel``, its name led by ``prefix``."""
+        target = self._root / (rel if self._preserve_structure else Path(rel.name))
+        if not target.name.startswith(prefix):  # a charmfix output keeps its name
+            target = target.with_name(prefix + target.name)
         candidate, n = target, 0
-        while str(candidate).casefold() in claimed:
+        while str(candidate).casefold() in self._claimed:
             n += 1
             candidate = target.with_name(f"{target.stem}_{n}{target.suffix}")
-        claimed.add(str(candidate).casefold())
-        result.append(candidate)
-    return result
+        self._claimed.add(str(candidate).casefold())
+        return candidate
 
 
 def _current_umask() -> int:
