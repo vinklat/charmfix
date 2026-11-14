@@ -17,7 +17,7 @@ from charmfix.report import FileResult, FileStatus, Summary, build_report
 
 ROOT = Path(__file__).resolve().parent.parent
 CONTRACTS = ("REPAIRS.md", "CLI.md", "DEVELOPMENT.md", "TESTING.md")
-DOCS = sorted(ROOT.glob("*.md"))
+DOCS = sorted([*ROOT.glob("*.md"), *ROOT.glob("docs/**/*.md")])
 
 FENCE_RE = re.compile(r"^\s{0,3}(`{3,}|~{3,})")
 HEADING_RE = re.compile(r"^#+\s+(.*?)\s*$")

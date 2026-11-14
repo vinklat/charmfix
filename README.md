@@ -1,10 +1,7 @@
 # charmfix
 
 Repair the EXIF metadata of Kodak Charmera photos so Apple Photos, and everything else, shows the
-right date, size and camera. Only metadata changes: every byte of image data stays the same (→
-[REPAIRS.md](REPAIRS.md#invariant)), and charmfix checks this before it writes each file (→
-[REPAIRS.md](REPAIRS.md#verification)). Source files are never modified (→
-[CLI.md](CLI.md#source-safety)). Repaired copies go to a separate folder.
+right date, size and camera. Only metadata changes: every byte of image data stays the same.
 
 ## What is wrong with Charmera files
 
@@ -16,67 +13,48 @@ outside the EXIF block. charmfix fixes all of these; the exact rules are in
 
 ## Install
 
-Released versions are published to [PyPI](https://pypi.org/project/charmfix/). With
+With [Homebrew](https://brew.sh/):
+
+```sh
+brew install vinklat/tap/charmfix
+```
+
+Released versions are also published to [PyPI](https://pypi.org/project/charmfix/). With
 [uv](https://docs.astral.sh/uv/):
 
 ```sh
-uv tool install charmfix   # puts `charmfix` on your PATH
-uvx charmfix -h            # or run it without installing
+uv tool install charmfix
 ```
 
-`pipx install charmfix` works too. Before the first release, or to run unreleased changes, install
-from a checkout of this repository (→ [DEVELOPMENT.md](DEVELOPMENT.md#quality-gates)):
-
-```sh
-uv tool install .
-uvx --from . charmfix -h
-```
-
-Supported Python versions → [DEVELOPMENT.md](DEVELOPMENT.md#prerequisites-and-setup).
+`pipx install charmfix` works too, and `uvx charmfix` runs it without installing.
 
 ## Usage
 
 ```sh
-charmfix /Volumes/CHARMERA                     # writes to ~/Pictures/Kodak Charmera Repaired
-charmfix /Volumes/CHARMERA -o ~/Desktop/fixed --report ~/Desktop/charmfix-report.json
-charmfix /Volumes/CHARMERA --dry-run -v        # show what would change, write nothing
+charmfix /Volumes/CHARMERA
 ```
 
-Without `-o`, copies go to the default output folder → [CLI.md](CLI.md#options). All options, exit
-codes and the report format are in [CLI.md](CLI.md). Each file gets a status →
-[REPAIRS.md](REPAIRS.md#status). Running charmfix again on the same card skips files it has already
-written. With the default date prefix, a file dated from its modification time
-([rule 1a](REPAIRS.md#rules)) gets a new name and is copied again when that time changes (e.g. a
-copy made without `cp -p`) or the computer's time zone changes → [CLI.md](CLI.md#output-files).
+It repairs the EXIF metadata of the photos on the card and writes the fixed copies to the default
+output folder (`~/Pictures/Kodak Charmera Repaired` unless `-o` is given). Pictures on the card
+itself are never modified, and the next run skips files it has already fixed.
 
-**Output names start with the capture time**, e.g. `20260402-083000_PICT0010.jpg`, so a later card
-whose camera numbering restarted is not skipped as already written. `--no-date-prefix` keeps the
-camera's names. A folder filled with the other setting is not matched →
-[CLI.md](CLI.md#output-files).
-
-**Run it on the card itself.** When a file has no usable EXIF date (often no EXIF at all), the
-capture date is the file's modification time, which the camera sets when it takes the photo
-([rule 1a](REPAIRS.md#rules)). Use the mounted card, or a copy that kept the times (`cp -p`, Finder
-copy). Downloaded or exported files usually carry the copy time instead.
-
-**macOS blocks the card?** Follow the hint charmfix prints (→ [CLI.md](CLI.md#discovery)): allow the
-app you run it from under System Settings → Privacy & Security → Files and Folders → Removable
-Volumes (or Full Disk Access), then restart that app.
+All options and usage details → [full usage documentation](docs/guides/usage.md).
 
 ## Apple Photos workflow
 
-1. Insert the card and run `charmfix /Volumes/<card> --report ~/charmfix-report.json`.
-2. Check the summary and look at any `partial` or `failed` lines.
-3. In Photos, choose **File → Import…** and pick the output folder.
+1. Insert the card.
+2. In a terminal, run `charmfix /Volumes/<card>`.
+3. Check the summary.
+4. In Photos, choose **File → Import…** and pick the output folder
+   `~/Pictures/Kodak Charmera Repaired`.
 
 ## Documentation
 
 | Location | Audience | Authority |
 | -- | -- | -- |
-| [CLI.md](CLI.md) | Users, developers and AI agents | Canonical contract |
-| [REPAIRS.md](REPAIRS.md), [DEVELOPMENT.md](DEVELOPMENT.md), [TESTING.md](TESTING.md) | Developers and AI agents | Canonical contracts |
-| [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md) (imports AGENTS.md) | AI agents | How to use the contracts |
-| `README.md` | Users | Non-canonical user guide |
+| [usage.md](docs/guides/usage.md) | Users | Non-canonical user guide |
+| [CLI.md](CLI.md), [REPAIRS.md](REPAIRS.md), [DEVELOPMENT.md](DEVELOPMENT.md), [TESTING.md](TESTING.md) | Developers and AI agents | Canonical contracts |
+| [AGENTS.md](AGENTS.md) | AI agents | How to use the contracts |
 
 ## License
 
