@@ -51,6 +51,7 @@ def test_is_normal_form() -> None:
 
 def test_format_exif() -> None:
     assert dates.format_exif(datetime(2026, 3, 3, 9, 5, 1)) == "2026:03:03 09:05:01"
+    assert dates.format_exif(datetime(999, 6, 15, 12)) == "0999:06:15 12:00:00"  # glibc %Y
 
 
 def test_sanity_warning() -> None:

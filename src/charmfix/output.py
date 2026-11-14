@@ -31,9 +31,6 @@ class OutsideOutputError(Exception):
     """A symlinked folder would send the write outside the output folder."""
 
 
-DATE_PREFIX_FORMAT = "%Y%m%d-%H%M%S_"
-
-
 class OutputNames:
     """Output paths for one run, assigned in processing order and unique within the run.
 
@@ -45,11 +42,12 @@ class OutputNames:
         self.root, self.preserve_structure, self.date_prefix = root, preserve_structure, date_prefix
         self._claimed: set[str] = set()
 
-    def assign(self, rel: Path, taken: datetime) -> Path:
-        """Claim the output path for the input-relative ``rel``, captured at ``taken``."""
+    def assign(self, rel: Path, capture_time: datetime) -> Path:
+        """Claim the output path for the input-relative ``rel``, captured at ``capture_time``."""
         target = self.root / (rel if self.preserve_structure else Path(rel.name))
         if self.date_prefix:
-            prefix = taken.strftime(DATE_PREFIX_FORMAT)
+            # The year by hand: glibc's %Y does not pad years below 1000 before Python 3.14.
+            prefix = f"{capture_time.year:04d}{capture_time:%m%d-%H%M%S}_"
             if not target.name.startswith(prefix):  # a charmfix output keeps its name
                 target = target.with_name(prefix + target.name)
         candidate, n = target, 0

@@ -28,7 +28,7 @@ Tests assert the owning contract directly; its values are not copied here.
 | JPEG layout (`test_jpeg.py`) | Non-Exif segments kept byte-for-byte, one Exif segment, APP1 placement → [REPAIRS.md](REPAIRS.md#invariant). |
 | EXIF reader damage (`test_exif_read.py`) | Every kind of damage (header, bounds, loop, entry table, type, count, pointer) gives a warning, never an exception. |
 | EXIF reader values (`test_exif_read.py`) | Both byte orders; first duplicate wins; MakerNote status; thumbnail bounds. |
-| Dates (`test_dates.py`) | Accepted and rejected forms, normal form, sanity warnings → [REPAIRS.md](REPAIRS.md#rules). |
+| Dates (`test_dates.py`) | Accepted and rejected forms, normal form, four-digit years, sanity warnings → [REPAIRS.md](REPAIRS.md#rules). |
 | Repair rules (`test_repair.py`) | At least one case per rule → [REPAIRS.md](REPAIRS.md#rules). |
 | Repair identity and status (`test_repair.py`) | Each identity → [REPAIRS.md](REPAIRS.md#camera-identity); each status → [REPAIRS.md](REPAIRS.md#status). |
 | Repair target text (`test_repair.py`) | Accepted boundaries and each rejected kind → [REPAIRS.md](REPAIRS.md#camera-identity), for Make and Model, each naming its field. |

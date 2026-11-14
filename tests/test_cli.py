@@ -306,12 +306,12 @@ def test_single_file_input(tmp_path: Path) -> None:
     assert (tmp_path / "out" / f"{PREFIX}x.jpg").exists()
 
 
-def reused_card(root: Path, session: int, taken: datetime) -> Path:
+def reused_card(root: Path, session: int, capture_time: datetime) -> Path:
     """A card emptied and reused: each session restarts the camera's file numbers."""
     src = root / f"session{session}" / "DCIM" / "PICT0001.jpg"
     src.parent.mkdir(parents=True)
     src.write_bytes(charmera_layout(make_jpeg()))
-    os.utime(src, (taken.timestamp(), taken.timestamp()))
+    os.utime(src, (capture_time.timestamp(), capture_time.timestamp()))
     return src.parents[1]
 
 

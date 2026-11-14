@@ -76,6 +76,11 @@ def test_assign_keeps_an_existing_prefix(tmp_path: Path) -> None:
     assert dest == tmp_path / f"{PREFIX}x.jpg"
 
 
+def test_assign_pads_the_year(tmp_path: Path) -> None:
+    dest = names(tmp_path).assign(Path("x.jpg"), datetime(5, 1, 1))
+    assert dest == tmp_path / "00050101-000000_x.jpg"  # glibc's %Y would give 50101-…
+
+
 def test_assign_prefixes_a_name_with_another_time(tmp_path: Path) -> None:
     dest = names(tmp_path).assign(Path("20000101-000000_x.jpg"), TAKEN)
     assert dest == tmp_path / f"{PREFIX}20000101-000000_x.jpg"
