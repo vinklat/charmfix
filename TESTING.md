@@ -28,13 +28,13 @@ Tests assert the owning contract directly; its values are not copied here.
 | JPEG layout (`test_jpeg.py`) | Non-Exif segments kept byte-for-byte, one Exif segment, APP1 placement → [REPAIRS.md](REPAIRS.md#invariant). |
 | EXIF reader damage (`test_exif_read.py`) | Every kind of damage (header, bounds, loop, entry table, type, count, pointer) gives a warning, never an exception. |
 | EXIF reader values (`test_exif_read.py`) | Both byte orders; first duplicate wins; MakerNote status; thumbnail bounds. |
-| Dates (`test_dates.py`) | Accepted and rejected forms, normal form, four-digit years, sanity warnings → [REPAIRS.md](REPAIRS.md#rules). |
+| Dates (`test_dates.py`) | Accepted and rejected forms, normal form, sanity warnings → [REPAIRS.md](REPAIRS.md#rules). |
 | Repair rules (`test_repair.py`) | At least one case per rule → [REPAIRS.md](REPAIRS.md#rules). |
 | Repair identity and status (`test_repair.py`) | Each identity → [REPAIRS.md](REPAIRS.md#camera-identity); each status → [REPAIRS.md](REPAIRS.md#status). |
 | Repair target text (`test_repair.py`) | Accepted boundaries and each rejected kind → [REPAIRS.md](REPAIRS.md#camera-identity), for Make and Model, each naming its field. |
 | Repair round trip (`test_repair.py`) | Every case runs plan → write → splice → verify, re-reads the output, and a second run with the same options gives `already_valid` and no warning the first did not → [REPAIRS.md](REPAIRS.md#camera-identity). |
 | Output validity (`test_external.py`) | Per generated fixture: identical pixels and image-data hash, `exiftool -validate` OK, `sips` size and date. |
-| Output names (`test_output.py`, `test_cli.py`) | Every row from path to other prefix setting, including a year below 1000 → [CLI.md](CLI.md#output-files). |
+| Output names (`test_output.py`, `test_cli.py`) | Every row from path to other prefix setting → [CLI.md](CLI.md#output-files). |
 | Atomic writes (`test_output.py`) | Every row from atomic write to file times → [CLI.md](CLI.md#output-files). |
 | CLI batch (`test_cli.py`) | A corrupt file fails only that file; source hashes and mtimes are unchanged. |
 | CLI re-run (`test_cli.py`) | Second run → only `exists` skips, each with its `output` and nothing built, also as a dry run; run on the output → all `already_valid`. |

@@ -61,7 +61,7 @@ Run all of these before handing over a change.
 
 | Path | Owns |
 | -- | -- |
-| `src/charmfix/cli.py` | Argument parsing, path refusals, console output, exit codes. |
+| `src/charmfix/cli.py` | Argument parsing, path refusals, the batch loop (discovery, one name register per run), console output, exit codes. |
 | `src/charmfix/pipeline.py` | Run options; `analyse()` and `build()` (in memory, `rebuild()` runs both) and `process_file()` (one file, errors → result). |
 | `src/charmfix/discovery.py` | Walking the input and classifying candidates. |
 | `src/charmfix/output.py` | Output path mapping and atomic writes; the only module that writes image files. |

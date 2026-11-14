@@ -264,13 +264,23 @@ def test_dry_run_writes_nothing(card: Path, tmp_path: Path) -> None:
     assert not out.exists()
 
 
-def test_dry_run_into_filled_output(card: Path, tmp_path: Path) -> None:
+def test_dry_run_into_filled_output(
+    card: Path, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
     out, report = tmp_path / "out", tmp_path / "r.json"
-    run(card, "-o", out)
+    run(card, "-o", out, "--report", report)
+    written = {f["rel_path"]: f["output"] for f in json.loads(report.read_text())["files"]}
     before = state(out)
+
+    def build_called(*_: object) -> bytes:
+        raise AssertionError("an existing output was built again")
+
+    monkeypatch.setattr(pipeline, "build", build_called)
     assert run(card, "-o", out, "--dry-run", "--report", report) == 1
-    summary = json.loads(report.read_text())["summary"]
-    assert summary["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    second = json.loads(report.read_text())
+    assert second["summary"]["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    exists = {f["rel_path"]: f["output"] for f in second["files"] if f["reason"] == "exists"}
+    assert len(exists) == 4 and all(written[rel] == output for rel, output in exists.items())
     assert state(out) == before
 
 
