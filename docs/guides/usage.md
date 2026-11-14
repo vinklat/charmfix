@@ -18,7 +18,8 @@ Linux, use the card's mount point instead.
 charmfix then:
 
 1. finds every `.jpg` and `.jpeg` file on the card, including subfolders;
-2. writes a repaired copy of each one to `~/Pictures/Kodak Charmera Repaired`;
+2. writes a repaired copy of each one to `~/Pictures/Kodak Charmera Repaired`, or to the folder
+   given with `-o` → [CLI.md](../../CLI.md#options);
 3. prints a [summary](#reading-the-summary).
 
 The card is only read: nothing on it is changed, renamed or deleted →
@@ -32,16 +33,16 @@ checks that before it writes each file → [REPAIRS.md](../../REPAIRS.md#verific
 | Shown in Photos | What charmfix writes |
 | -- | -- |
 | Date and time | The capture time → [where the date comes from](#where-the-date-comes-from). |
-| Size | The real pixel size of the image. |
+| Size | The real pixel size of the image; left out, as `partial`, when the file does not record its height → [REPAIRS.md](../../REPAIRS.md#rules) (rule 2a). |
 | Camera | `Kodak Charmera`, or [your own text](#camera-name). |
 | Orientation | Kept; set to normal when missing or invalid. Pixels are never rotated. |
 
 | Good to know | Detail |
 | -- | -- |
 | Healthy files | A photo with nothing wrong is copied unchanged. |
-| Rebuilt EXIF | The camera's MakerNote and tags charmfix does not know are dropped. |
-| Never added | A time zone, lens or exposure data. |
-| Other files | Videos and anything else that is not a JPEG are ignored. |
+| Rebuilt EXIF | The camera's MakerNote, unknown tags and known tags with invalid values are dropped; a time zone offset is dropped when the dates are rewritten → [REPAIRS.md](../../REPAIRS.md#rules) (rules 1d, 4, 5). |
+| Never added | A new time zone, lens or exposure data. |
+| Other files | In a folder, files not named `.jpg`/`.jpeg` are ignored; a file that is not JPEG data is `skipped` → [CLI.md](../../CLI.md#discovery). |
 
 All repair rules → [REPAIRS.md](../../REPAIRS.md#rules).
 
@@ -59,9 +60,10 @@ the copy, and that is the date you would get.
 | -- | -- |
 | EXIF date present and readable, even in the camera's broken form | That date. |
 | No readable EXIF date | The file's modification time. |
-| Date before 2000 or in the future | Still used, with a warning: the camera clock was probably not set. |
+| Date before 2000 or more than a day in the future | Still used, with a warning: the camera clock was probably not set. |
 
-charmfix cannot correct a camera clock that was wrong when the photo was taken.
+charmfix cannot correct a camera clock that was wrong when the photo was taken. Exact date rules
+(1, 1a, 1b) → [REPAIRS.md](../../REPAIRS.md#rules).
 
 ## Where the copies go
 
@@ -86,7 +88,7 @@ sorting by date in Finder works too.
 
 Two files that would get the same name in one run are told apart with `_1`, `_2`, … before the
 extension. The output folder must not be on the card or contain it →
-[messages](#messages-and-fixes). All naming rules → [CLI.md](../../CLI.md#output-files).
+[CLI.md](../../CLI.md#source-safety). All naming rules → [CLI.md](../../CLI.md#output-files).
 
 ## Reading the summary
 
@@ -105,40 +107,44 @@ Summary:
 
 | Line | Meaning | What to do |
 | -- | -- | -- |
-| `discovered` | JPEG files found. | — |
+| `discovered` | Files named `.jpg`/`.jpeg`, plus subfolders that could not be read; each ends in one of the lines below unless the run stopped early. | — |
 | `repaired` | Fixed and written. | — |
-| `partial` | Written, but EXIF the file already had could not all be kept. | Check the date of these photos. |
+| `partial` | Written, but EXIF the file already had could not all be kept. | Check the date and size of these photos. |
 | `already valid` | Nothing to fix; copied unchanged. | — |
 | `skipped` | Not written; the reasons are listed below the line. | `exists` is normal on a [second run](#running-it-again). |
 | `failed` | Not written; the other files were still processed. | Read the message printed for the file. |
+| `STOPPED EARLY: …` | The run stopped (full disk or Ctrl-C); files after that point were not processed. | Fix the cause and run again; finished photos are skipped. |
 
 Every `partial` and `failed` file, and every file with a warning, gets its own line above the
 summary. The last three lines count repairs of interest: dates written, metadata blocks rebuilt and
 MakerNotes dropped. Exact conditions → [REPAIRS.md](../../REPAIRS.md#status); skip reasons →
-[CLI.md](../../CLI.md#discovery).
+[CLI.md](../../CLI.md#discovery) and, for `exists`, [CLI.md](../../CLI.md#output-files).
 
 ## Running it again
 
 Run charmfix after every outing: photos already in the output folder are skipped as `exists`, and
-only the new ones are written.
+the new ones are written, except when names clash (last row below).
 
-A photo is matched by its output name, so it is written again, next to the older copy, when that
-name changes:
+A photo is matched by its path in the output folder, so it is written again, next to the older
+copy, when that path changes:
 
 | Change since the last run | Photos affected |
 | -- | -- |
-| The file's modification time changed (a copy that did not keep it) | Those dated from the file time. |
-| The computer's time zone changed | Those dated from the file time. |
+| The file's modification time changed (a copy that did not keep it) | Those dated from the file time, unless `--no-date-prefix` is on. |
+| The computer's time zone changed | Those dated from the file time, unless `--no-date-prefix` is on. |
 | `--no-date-prefix` switched on or off | All. |
+| `--no-preserve-structure` switched on or off | Those in subfolders of the card. |
+| New or failed photos share a name, so the `_1`, `_2`, … numbers move | A new or earlier-failed photo can be skipped as `exists` and not written; another is written again under the next number → [CLI.md](../../CLI.md#output-files). |
 
-To write everything again over the existing copies, add `--force`.
+To write everything again over the existing copies, add `--force`. All re-run rules →
+[CLI.md](../../CLI.md#output-files).
 
 ## Options
 
 | Option | What it does |
 | -- | -- |
 | `-o DIR`, `--output DIR` | Write the copies to `DIR` instead of `~/Pictures/Kodak Charmera Repaired`. |
-| `-n`, `--dry-run` | Show what would happen; write no photos and create no folders. |
+| `-n`, `--dry-run` | Show what would happen; write no photos and create no output folders (a `--report` is still written). |
 | `-v`, `--verbose` | List every file and every change. |
 | `--report FILE` | Also save the results as JSON → [report](#report). |
 | `--force` | Replace copies that already exist in the output folder. |
@@ -175,26 +181,23 @@ repaired DCIM/PICT0010.jpg
 ### A single photo
 
 ```sh
-charmfix ~/Downloads/PICT0010.jpg -o ~/Desktop/fixed
+charmfix /Volumes/CHARMERA/DCIM/PICT0010.jpg -o ~/Desktop/fixed
 ```
 
 Give the file instead of a folder. The output folder must be a different folder from the one the
-photo is in.
+photo is in → [CLI.md](../../CLI.md#source-safety).
 
 ### Camera name
 
-charmfix treats a file as a Charmera photo when its EXIF says so, or when it carries the
-`GPEncoder` comment the camera's chip writes. Those files get the Make `Kodak` and the Model
-`Charmera`.
+Photos from the camera get the Make `Kodak` and the Model `Charmera`, or your own text. A file that
+already names another camera keeps it, sometimes with a warning. Which files count as Charmera
+photos → [REPAIRS.md](../../REPAIRS.md#camera-identity).
 
 | To | Use |
 | -- | -- |
-| Write another name | `--make "My Brand" --model "My Camera"` (plain ASCII text) |
+| Write another name | `--make "My Brand" --model "My Camera"` (1–64 printable ASCII characters, no surrounding spaces) |
 | Leave files that only have the `GPEncoder` comment unnamed | `--no-assume-charmera` |
 | Change the name on photos already copied | Run on the originals again with the new name and `--force`. |
-
-A file that already names another camera keeps that name, with a warning. All identity rules →
-[REPAIRS.md](../../REPAIRS.md#camera-identity).
 
 ### Report
 
@@ -207,8 +210,8 @@ each change, and any warning or error. It is also written in a dry run.
 
 | Property | Detail |
 | -- | -- |
-| Location | Anywhere outside the folder charmfix reads. |
-| Paths | Relative only; your folder names are not included. |
+| Location | Outside the input folder; for a single photo, any file but that photo. |
+| Paths | Relative to the input and output folders: subfolder names appear, the folders above them do not. |
 | Private text | Comments, artist and copyright text are not included. |
 | Existing file | Replaced. |
 
@@ -216,9 +219,7 @@ All keys and privacy rules → [CLI.md](../../CLI.md#report).
 
 ## Import into Apple Photos
 
-1. Insert the card and run `charmfix /Volumes/<card>`.
-2. Check the summary; look at any `partial` or `failed` line.
-3. In Photos, choose **File → Import…** and pick the output folder.
+The steps → [README.md](../../README.md#apple-photos-workflow).
 
 ## Messages and fixes
 
@@ -230,9 +231,14 @@ All keys and privacy rules → [CLI.md](../../CLI.md#report).
 | `input and output folders must not overlap` | The output folder is on the card, or contains it. | Choose an output folder elsewhere with `-o`. |
 | `the output folder must not be the input file's folder` | A single photo would be written next to itself. | Choose another folder with `-o`. |
 | `the report must not be written inside the input folder` | `--report` points at the card. | Save the report elsewhere. |
+| `the report must not replace the input file` | `--report` names the photo itself. | Give the report its own file name. |
+| `FAILED <folder>: cannot list folder` | A subfolder on the card cannot be read; the rest of the card is still processed. | Check that folder's permissions, then run again. |
 | `stopping: output volume is full` | The disk with the output folder is full. | Free some space and run again; finished photos are skipped. |
-| Every photo has the date of the copy | The files were not read from the card → [where the date comes from](#where-the-date-comes-from). | Run on the card, then delete the wrongly dated copies. |
-| A photo appears twice in the output folder | Its output name changed → [running it again](#running-it-again). | Delete the copy you do not want. |
+| Every photo has the date of the copy | The files were not read from the card → [where the date comes from](#where-the-date-comes-from). | Run on the card (add `--force` if you use `--no-date-prefix`), then delete the wrongly dated copies. |
+| A photo appears twice in the output folder | Its output path changed → [running it again](#running-it-again). | Delete the copy you do not want. |
+
+Refused paths → [CLI.md](../../CLI.md#source-safety); unreadable or empty input →
+[CLI.md](../../CLI.md#discovery); full disk → [CLI.md](../../CLI.md#output-files).
 
 ## Exit codes
 
@@ -240,9 +246,9 @@ For scripts:
 
 | Code | Meaning |
 | -- | -- |
-| 0 | Every file was repaired, already valid or skipped. |
+| 0 | Every file was repaired, partial, already valid or skipped. |
 | 1 | At least one file failed; the others were still processed. |
-| 2 | charmfix could not run or had to stop: wrong option, missing input, refused path, full disk. |
+| 2 | charmfix could not run or had to stop: wrong option, missing input, the given folder (or a single photo's folder) cannot be listed, refused path, full disk, report not writable. |
 | 130 | Interrupted with Ctrl-C; the summary and the report are still written. |
 
 All cases → [CLI.md](../../CLI.md#exit-codes).

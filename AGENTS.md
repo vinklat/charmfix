@@ -25,10 +25,10 @@ definition.
 
 | Task | Primary | Also check |
 | -- | -- | -- |
-| Change or add a repair rule | `REPAIRS.md` rules | `TESTING.md` repair rules |
+| Change or add a repair rule | `REPAIRS.md` rules | `TESTING.md` repair rules, `docs/guides/usage.md` |
 | New EXIF defect from a real camera file | Add the file under `tests/samples/<model>/` → [REPAIRS.md](REPAIRS.md#defects) | `TESTING.md` real samples |
-| CLI option or exit code | `CLI.md` | `docs/guides/usage.md`, `TESTING.md` CLI |
-| File reading/writing, report fields | `CLI.md` | `DEVELOPMENT.md` layout |
+| CLI option or exit code | `CLI.md` | `docs/guides/usage.md`, `README.md` usage, `TESTING.md` CLI |
+| File reading/writing, report fields | `CLI.md` | `DEVELOPMENT.md` layout, `docs/guides/usage.md` |
 | New module or import | `DEVELOPMENT.md` layout and dependencies | — |
 | Tests and fixtures | `TESTING.md` | The contract for the behavior under test |
 | Build, release, version bump | `DEVELOPMENT.md` release | `.github/workflows/release.yml` |
