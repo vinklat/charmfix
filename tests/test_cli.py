@@ -92,6 +92,24 @@ def locked(folder: Path) -> Iterator[Path]:
         folder.chmod(0o755)
 
 
+@contextmanager
+def forbid_build(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    """Fail on any ``pipeline.build`` call inside the block: existing outputs are skipped first."""
+
+    def build_called(*_: object) -> bytes:
+        raise AssertionError("an existing output was built again")
+
+    with monkeypatch.context() as m:
+        m.setattr(pipeline, "build", build_called)
+        yield
+
+
+def exists_outputs(report: Path) -> dict[str, str]:
+    """``rel_path`` → ``output`` of every file the report skipped as ``exists``."""
+    files = json.loads(report.read_text())["files"]
+    return {f["rel_path"]: f["output"] for f in files if f["reason"] == "exists"}
+
+
 def single_jpeg(tmp_path: Path) -> Path:
     src = tmp_path / "in" / "x.jpg"
     src.parent.mkdir()
@@ -190,16 +208,11 @@ def test_batch_run(
     assert "repaired" in capsys.readouterr().out
 
     # second run: nothing is built or rewritten, no _1 duplicates
-    def build_called(*_: object) -> bytes:
-        raise AssertionError("an existing output was built again")
-
     out_before = snapshot(out)
-    with monkeypatch.context() as m:
-        m.setattr(pipeline, "build", build_called)
+    with forbid_build(monkeypatch):
         assert run(card, "-o", out, "--report", report_path) == 1
-    second = json.loads(report_path.read_text())
-    assert second["summary"]["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
-    exists = {f["rel_path"]: f["output"] for f in second["files"] if f["reason"] == "exists"}
+    assert summary_of(report_path)["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    exists = exists_outputs(report_path)
     assert exists["DCIM/model_1987/PICT0010.jpg"] == f"DCIM/model_1987/{PREFIX}PICT0010.jpg"
     assert snapshot(out) == out_before
 
@@ -226,11 +239,15 @@ def test_symlinked_output_folder_never_reaches_source(
     card: Path, tmp_path: Path, force: list[str]
 ) -> None:
     out, report = tmp_path / "out", tmp_path / "r.json"
+    elsewhere = tmp_path / "elsewhere"  # a copy of the card's DCIM, outside the output folder
+    shutil.copytree(card / "DCIM", elsewhere)
+    # an output already there: an `exists` check through the link would skip the file
+    (elsewhere / f"model_1987/{PREFIX}PICT0010.jpg").write_bytes(b"old")
     out.mkdir()
-    (out / "DCIM").symlink_to(card / "DCIM")
-    before = snapshot(card)
+    (out / "DCIM").symlink_to(elsewhere)
+    before = snapshot(card), snapshot(elsewhere)
     assert run(card, "-o", out, *force, "--report", report) == 1
-    assert snapshot(card) == before
+    assert (snapshot(card), snapshot(elsewhere)) == before
     files = json.loads(report.read_text())["files"]
     repaired = [f for f in files if f["rel_path"] == "DCIM/model_1987/PICT0010.jpg"]
     assert repaired[0]["status"] == "failed"
@@ -271,15 +288,10 @@ def test_dry_run_into_filled_output(
     run(card, "-o", out, "--report", report)
     written = {f["rel_path"]: f["output"] for f in json.loads(report.read_text())["files"]}
     before = state(out)
-
-    def build_called(*_: object) -> bytes:
-        raise AssertionError("an existing output was built again")
-
-    monkeypatch.setattr(pipeline, "build", build_called)
-    assert run(card, "-o", out, "--dry-run", "--report", report) == 1
-    second = json.loads(report.read_text())
-    assert second["summary"]["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
-    exists = {f["rel_path"]: f["output"] for f in second["files"] if f["reason"] == "exists"}
+    with forbid_build(monkeypatch):
+        assert run(card, "-o", out, "--dry-run", "--report", report) == 1
+    assert summary_of(report)["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    exists = exists_outputs(report)
     assert len(exists) == 4 and all(written[rel] == output for rel, output in exists.items())
     assert state(out) == before
 
