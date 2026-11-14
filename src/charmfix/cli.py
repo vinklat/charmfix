@@ -10,8 +10,8 @@ from pathlib import Path
 from typing import TextIO
 
 from . import __version__
-from .discovery import Candidate, unreadable_reason
-from .pipeline import DiskFullError, RunOptions, prepare, process_file
+from .discovery import discover, unreadable_reason
+from .pipeline import DiskFullError, RunOptions, process_file
 from .repair import DEFAULT_MAKE, DEFAULT_MODEL, RepairOptions, check_target_text
 from .report import FileResult, Summary, build_report, write_report
 
@@ -229,7 +229,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     exit_code = EXIT_OK
     try:
         # walks the card: Ctrl-C may land here too
-        candidates: list[Candidate] = prepare(input_path, opts)
+        candidates = list(discover(input_path, recursive=opts.recursive))
         if not candidates:
             log.warning("no .jpg/.jpeg files found in %s", input_path)
         summary.discovered = len(candidates)

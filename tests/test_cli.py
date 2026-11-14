@@ -132,7 +132,9 @@ def run(*args: str | Path) -> int:
     return cli.main([str(a) for a in args])
 
 
-def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+def test_batch_run(
+    card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
     out, report_path = tmp_path / "out", tmp_path / "report.json"
     before = snapshot(card)
 
@@ -186,11 +188,18 @@ def test_batch_run(card: Path, tmp_path: Path, capsys: pytest.CaptureFixture[str
     assert jpeg.image_data(jpeg.parse(written.read_bytes())) == jpeg.image_data(src_jf)
     assert "repaired" in capsys.readouterr().out
 
-    # second run: nothing is rewritten, no _1 duplicates
+    # second run: nothing is built or rewritten, no _1 duplicates
+    def build_called(*_: object) -> bytes:
+        raise AssertionError("an existing output was built again")
+
     out_before = snapshot(out)
-    assert run(card, "-o", out, "--report", report_path) == 1
-    second = json.loads(report_path.read_text())["summary"]
-    assert second["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    with monkeypatch.context() as m:
+        m.setattr(pipeline, "build", build_called)
+        assert run(card, "-o", out, "--report", report_path) == 1
+    second = json.loads(report_path.read_text())
+    assert second["summary"]["skipped_reasons"] == {"exists": 4, "not JPEG content": 1}
+    exists = {f["rel_path"]: f["output"] for f in second["files"] if f["reason"] == "exists"}
+    assert exists["DCIM/model_1987/PICT0010.jpg"] == f"DCIM/model_1987/{PREFIX}PICT0010.jpg"
     assert snapshot(out) == out_before
 
     # running on the output: everything is already valid and copied unchanged, under its name
@@ -508,7 +517,7 @@ def test_disk_full_stops_batch(
     assert not list(out.rglob(".charmfix-*.tmp"))
 
 
-@pytest.mark.parametrize("step", ["prepare", "process_file"])  # discovery, then processing
+@pytest.mark.parametrize("step", ["discover", "process_file"])  # discovery, then processing
 def test_interrupt_exits_130(
     card: Path,
     tmp_path: Path,
@@ -516,7 +525,7 @@ def test_interrupt_exits_130(
     capsys: pytest.CaptureFixture[str],
     step: str,
 ) -> None:
-    def interrupt(*_: object) -> None:
+    def interrupt(*_: object, **__: object) -> None:
         raise KeyboardInterrupt
 
     monkeypatch.setattr(cli, step, interrupt)
