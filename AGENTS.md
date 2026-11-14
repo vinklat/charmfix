@@ -7,7 +7,7 @@ instead of copying.
 
 1. The root contract that owns the domain (table below). `DEVELOPMENT.md` prevails on style.
 2. The implementation in `src/charmfix/` and the tests, when checking current behavior.
-3. `README.md`: the non-canonical user guide.
+3. `README.md` and `docs/guides/`: the non-canonical user guides.
 
 Resolve drift by updating the owning contract and the code together, never by adding a second
 definition.
@@ -25,10 +25,10 @@ definition.
 
 | Task | Primary | Also check |
 | -- | -- | -- |
-| Change or add a repair rule | `REPAIRS.md` rules | `TESTING.md` repair rules |
+| Change or add a repair rule | `REPAIRS.md` rules | `TESTING.md` repair rules, `docs/guides/usage.md` |
 | New EXIF defect from a real camera file | Add the file under `tests/samples/<model>/` → [REPAIRS.md](REPAIRS.md#defects) | `TESTING.md` real samples |
-| CLI option or exit code | `CLI.md` | `README.md` usage, `TESTING.md` CLI |
-| File reading/writing, report fields | `CLI.md` | `DEVELOPMENT.md` layout |
+| CLI option or exit code | `CLI.md` | `docs/guides/usage.md`, `README.md` usage, `TESTING.md` CLI |
+| File reading/writing, report fields | `CLI.md` | `DEVELOPMENT.md` layout, `docs/guides/usage.md` |
 | New module or import | `DEVELOPMENT.md` layout and dependencies | — |
 | Tests and fixtures | `TESTING.md` | The contract for the behavior under test |
 | Build, release, version bump | `DEVELOPMENT.md` release | `.github/workflows/release.yml` |
@@ -51,5 +51,5 @@ definition.
 - Prefer tables with one fact per row. Keep cells short: split rows rather than pad them.
 - Wrap prose at 100 columns; table rows are exempt.
 - No TODOs or planned work in contracts.
-- `README.md` explains and links; it never defines behavior.
+- `README.md` and `docs/guides/` explain and link; they never define behavior.
 - `tests/test_docs.py` must pass after any `*.md` edit.

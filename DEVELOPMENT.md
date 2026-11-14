@@ -73,6 +73,7 @@ Run all of these before handing over a change.
 | `src/charmfix/exif_read.py` | Tolerant TIFF/IFD reader. |
 | `src/charmfix/dates.py` | EXIF date parsing and formatting. |
 | `tests/` | Tests, builders and real samples → [TESTING.md](TESTING.md#harness). |
+| `docs/guides/` | User guides; non-canonical → [AGENTS.md](AGENTS.md#source-priority). |
 | `.github/workflows/` | CI → [Quality gates](#quality-gates); release → [Release](#release). |
 
 ## Dependencies
